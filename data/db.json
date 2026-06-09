@@ -1597,45 +1597,45 @@
   "finances": [
     {
       "date": "2026-06-02",
-      "income": 11407120,
-      "expense": 2095560,
-      "patients": 16
+      "income": 8192716,
+      "expense": 3347525,
+      "patients": 21
     },
     {
       "date": "2026-06-03",
-      "income": 12739860,
-      "expense": 3936952,
-      "patients": 14
+      "income": 5912175,
+      "expense": 2867322,
+      "patients": 21
     },
     {
       "date": "2026-06-04",
-      "income": 9473799,
-      "expense": 4081079,
-      "patients": 11
+      "income": 7974285,
+      "expense": 3560553,
+      "patients": 12
     },
     {
       "date": "2026-06-05",
-      "income": 6013992,
-      "expense": 3257940,
-      "patients": 19
+      "income": 7033856,
+      "expense": 3705327,
+      "patients": 12
     },
     {
       "date": "2026-06-06",
-      "income": 6240466,
-      "expense": 2706989,
-      "patients": 19
+      "income": 14638894,
+      "expense": 3405545,
+      "patients": 14
     },
     {
       "date": "2026-06-07",
-      "income": 9290841,
-      "expense": 3256431,
-      "patients": 18
+      "income": 7605749,
+      "expense": 3194720,
+      "patients": 20
     },
     {
       "date": "2026-06-08",
-      "income": 8431258,
-      "expense": 4635202,
-      "patients": 15
+      "income": 11985383,
+      "expense": 4756764,
+      "patients": 16
     }
   ],
   "payments": [
@@ -1815,7 +1815,7 @@
       "id": "NOT-001",
       "type": "medicine",
       "message": "Ketonal miqdori kam qoldi (25 ta)",
-      "time": "2026-06-08T19:22:36.797Z",
+      "time": "2026-06-08T20:53:01.218Z",
       "roles": [
         "admin"
       ],
@@ -1825,7 +1825,7 @@
       "id": "NOT-002",
       "type": "patient",
       "message": "Yangi bemor qabul qilindi: Olim Ergashev (Tez yordam)",
-      "time": "2026-06-08T18:22:36.797Z",
+      "time": "2026-06-08T19:53:01.218Z",
       "roles": [
         "doctor",
         "nurse"
@@ -1836,7 +1836,7 @@
       "id": "NOT-003",
       "type": "queue",
       "message": "3 ta bemor navbatda kutmoqda",
-      "time": "2026-06-08T18:52:36.797Z",
+      "time": "2026-06-08T20:23:01.218Z",
       "roles": [
         "doctor"
       ],
@@ -1846,7 +1846,7 @@
       "id": "NOT-004",
       "type": "sos",
       "message": "⚠️ Dori muddati tugamoqda: Diazepam (2025-07-20)",
-      "time": "2026-06-08T17:22:36.797Z",
+      "time": "2026-06-08T18:53:01.218Z",
       "roles": [
         "admin",
         "nurse"
@@ -1857,7 +1857,7 @@
       "id": "NOT-005",
       "type": "payment",
       "message": "Jasur Xolmatov - 2,050,000 so'm qarz qoldig'i",
-      "time": "2026-06-08T17:52:36.797Z",
+      "time": "2026-06-08T19:23:01.218Z",
       "roles": [
         "admin",
         "reception"
@@ -1868,7 +1868,7 @@
       "id": "NOT-006",
       "type": "discharge",
       "message": "Sherzod Aliyev bugun chiqarildi",
-      "time": "2026-06-08T16:52:36.797Z",
+      "time": "2026-06-08T18:23:01.218Z",
       "roles": [
         "reception"
       ],
@@ -1877,67 +1877,60 @@
   ],
   "activityLog": [
     {
-      "user": "Resepshion",
-      "action": "Yangi bemor ro'yxatdan o'tkazildi",
-      "target": "Otabek Jamilov",
-      "id": "LOG-2026-2388",
-      "time": "2026-06-08T19:22:36.671Z"
-    },
-    {
       "id": "LOG-001",
       "user": "Sardor (Resepshion)",
       "action": "Yangi bemor ro'yxatdan o'tkazildi",
       "target": "Olim Ergashev",
-      "time": "2026-06-08T18:50:16.146Z"
+      "time": "2026-06-08T20:23:01.218Z"
     },
     {
       "id": "LOG-002",
       "user": "Akbar (Shifokor)",
       "action": "Tashxis qo'yildi",
       "target": "Malika Tursunova - Migren",
-      "time": "2026-06-08T18:20:16.146Z"
+      "time": "2026-06-08T19:53:01.218Z"
     },
     {
       "id": "LOG-003",
       "user": "Nodira (Hamshira)",
       "action": "Dori berildi",
       "target": "Aziz Sobirov - Aspirin 100mg",
-      "time": "2026-06-08T17:50:16.146Z"
+      "time": "2026-06-08T19:23:01.218Z"
     },
     {
       "id": "LOG-004",
       "user": "Nodira (Hamshira)",
       "action": "Retsept bo'yicha dori berdi",
       "target": "Aziz Sobirov - Aspirin, Atorvastatin",
-      "time": "2026-06-08T17:20:16.146Z"
+      "time": "2026-06-08T18:53:01.218Z"
     },
     {
       "id": "LOG-005",
       "user": "Sardor (Resepshion)",
       "action": "To'lov qabul qilindi",
       "target": "Shahlo Mirzayeva - 200,000 so'm",
-      "time": "2026-06-08T16:50:16.146Z"
+      "time": "2026-06-08T18:23:01.218Z"
     },
     {
       "id": "LOG-006",
       "user": "Bobur (Jarroh)",
       "action": "Bemorni operatsiya qildi",
       "target": "Jasur Xolmatov - Appendektomiya",
-      "time": "2026-06-06T19:20:16.146Z"
+      "time": "2026-06-06T20:53:01.218Z"
     },
     {
       "id": "LOG-007",
       "user": "Malika (Hamshira)",
       "action": "Vital belgilar o'lchandi",
       "target": "Jasur Xolmatov - Harorat: 37.5°C",
-      "time": "2026-06-08T16:20:16.146Z"
+      "time": "2026-06-08T17:53:01.218Z"
     },
     {
       "id": "LOG-008",
       "user": "Admin",
       "action": "Yangi xodim qo'shildi",
       "target": "Sardor Nazarov - Resepshion",
-      "time": "2026-06-03T19:20:16.146Z"
+      "time": "2026-06-03T20:53:01.218Z"
     }
   ],
   "clinicSettings": {

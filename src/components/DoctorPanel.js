@@ -11,7 +11,18 @@ import {
   Calendar, Stethoscope, BedDouble, FolderOpen, BookOpen,
   Clock, CheckCircle, XCircle, AlertCircle, Play, Eye,
   Plus, FileText, Pill, Search, User, Activity, ClipboardList,
+  Upload, Download, Trash2,
 } from 'lucide-react';
+
+const getFileIcon = (name) => {
+  if (!name) return '📄';
+  const ext = name.split('.').pop().toLowerCase();
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return '🖼️';
+  if (ext === 'pdf') return '📕';
+  if (['doc', 'docx', 'txt', 'rtf'].includes(ext)) return '📝';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+  return '📄';
+};
 
 const TABS = [
   { key: 'queue', label: 'Bugungi Navbatlar', icon: <Calendar size={18} /> },
@@ -153,6 +164,34 @@ function ExamineSection({ patient, onBack }) {
   const [newTreatment, setNewTreatment] = useState('');
   const [selectedRoom, setSelectedRoom] = useState('');
   const [admitToHospital, setAdmitToHospital] = useState(false);
+  const [files, setFiles] = useState([]);
+
+  const handleFileUpload = (e) => {
+    const uploadedFiles = Array.from(e.target.files);
+    uploadedFiles.forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        toast("Fayl hajmi 5MB dan oshmasligi kerak", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const fileObj = {
+          id: 'FL-' + Date.now() + Math.random().toString(36).substring(2, 5).toUpperCase(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          content: reader.result, // base64 string
+          date: new Date().toISOString().split('T')[0]
+        };
+        setFiles(prev => [...prev, fileObj]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeUploadedFile = (id) => {
+    setFiles(prev => prev.filter(f => f.id !== id));
+  };
 
   if (!patient) {
     return (
@@ -195,6 +234,7 @@ function ExamineSection({ patient, onBack }) {
       visits: updatedVisits,
       prescriptions: updatedPrescriptions,
       queueStatus: 'completed',
+      files: [...(patient.files || []), ...files],
     };
 
     if (admitToHospital && selectedRoom) {
@@ -276,7 +316,70 @@ function ExamineSection({ patient, onBack }) {
 
           <div className="card p-5">
             <h4 className="font-bold text-gray-900 mb-3">Ob&apos;ektiv ko&apos;rik</h4>
-            <textarea className="input" rows={3} placeholder="Shifokor ko'rik natijasi..." value={examination} onChange={e => setExamination(e.target.value)} />
+            <textarea className="input mb-4" rows={3} placeholder="Shifokor ko'rik natijasi..." value={examination} onChange={e => setExamination(e.target.value)} />
+            
+            {/* File Upload Dropzone */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Analizlar va Hujjatlar (Maks: 5MB)</label>
+              
+              <div className="border-2 border-dashed border-gray-200 dark:border-gray-800 hover:border-green-400 dark:hover:border-green-500 rounded-2xl p-5 text-center cursor-pointer transition-all bg-gray-50/50 hover:bg-green-50/5 dark:bg-white/5 dark:hover:bg-white/10 flex flex-col items-center justify-center relative">
+                <input 
+                  type="file" 
+                  multiple 
+                  onChange={handleFileUpload} 
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                />
+                <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-500/10 text-green-500 flex items-center justify-center mb-2">
+                  <Upload size={20} />
+                </div>
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Analiz faylini tanlang yoki sudrab tashlang</p>
+                <p className="text-[10px] text-gray-400 mt-1">Rasm, PDF yoki Tibbiy Hujjatlar</p>
+              </div>
+
+              {/* Uploaded Files preview */}
+              {[...(patient.files || []), ...files].length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {[...(patient.files || []), ...files].map(file => {
+                    const isNew = files.some(f => f.id === file.id);
+                    return (
+                      <div key={file.id} className="flex items-center justify-between p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm text-xs animate-fadeIn">
+                        <div className="flex items-center gap-2.5 truncate max-w-[75%]">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-zinc-800 flex items-center justify-center text-lg font-bold shrink-0">
+                            {getFileIcon(file.name)}
+                          </div>
+                          <div className="truncate">
+                            <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{file.name}</p>
+                            <p className="text-[10px] text-gray-400">
+                              {(file.size / 1024).toFixed(1)} KB • {file.date} {isNew && <span className="text-green-500 font-medium">(Yangi)</span>}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <a 
+                            href={file.content} 
+                            download={file.name}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-blue-500 transition-colors flex items-center justify-center"
+                            title="Yuklab olish"
+                          >
+                            <Download size={14} />
+                          </a>
+                          {isNew && (
+                            <button 
+                              type="button" 
+                              onClick={() => removeUploadedFile(file.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition-colors flex items-center justify-center"
+                              title="O'chirish"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="card p-5">
@@ -547,6 +650,37 @@ function PatientHistorySection() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {selectedPatient.files?.length > 0 && (
+            <div className="mt-6 animate-fadeIn">
+              <h4 className="font-bold text-gray-900 mb-3">Analizlar va Hujjatlar</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {selectedPatient.files.map(file => (
+                  <div key={file.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm text-xs">
+                    <div className="flex items-center gap-2.5 truncate max-w-[80%]">
+                      <div className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-zinc-800 flex items-center justify-center text-lg font-bold shrink-0">
+                        {getFileIcon(file.name)}
+                      </div>
+                      <div className="truncate">
+                        <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{file.name}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {(file.size / 1024).toFixed(1)} KB • {file.date}
+                        </p>
+                      </div>
+                    </div>
+                    <a 
+                      href={file.content} 
+                      download={file.name}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-blue-500 transition-colors flex items-center justify-center"
+                      title="Yuklab olish"
+                    >
+                      <Download size={14} />
+                    </a>
+                  </div>
+                ))}
               </div>
             </div>
           )}
