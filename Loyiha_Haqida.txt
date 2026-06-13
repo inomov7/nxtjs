@@ -1,0 +1,74 @@
+====================================================================
+               HAYOT KLINIKASI CRM TIZIMI — HUJJATLAR
+====================================================================
+
+Ushbu loyiha klinikalar faoliyatini avtomatlashtirish, xodimlar ishini
+boshqarish va bemorlar qabuli hamda moliyaviy hisobotlarni yuritish
+uchun mo'ljallangan zamonaviy, tezkor va xavfsiz CRM tizimidir.
+
+--------------------------------------------------------------------
+1. LOYIHA TEXNOLOGIYALARI
+--------------------------------------------------------------------
+* Next.js (App Router) — Server-side rendering va API endpointlar uchun.
+* React (Context API) — Global holat (state) va ma'lumotlar sinxronizatsiyasi uchun.
+* SQLite (sqlite3) — Yengil, tezkor va relatsion ma'lumotlar bazasi.
+* Lucide React — Tizimdagi premium darajadagi ikonkalarni yuklash uchun.
+* Recharts — Admin dashboard va hisobotlar bo'limidagi vizual grafiklar uchun.
+* TailwindCSS — Apple uslubidagi Premium UI/UX dizayn tizimi.
+
+--------------------------------------------------------------------
+2. MA'LUMOTLAR BAZASI SXEMASI (db.js)
+--------------------------------------------------------------------
+Tizim to'liq SQLite relatsion ma'lumotlar bazasidan foydalanadi. Jadvallar:
+1.  staff — Xodimlar (Admin, shifokor, hamshira, resepshion) va ularning login/parollari.
+2.  rooms — Stasionar xonalar ro'yxati, sig'imi va narxi.
+3.  patients — Bemorlar ma'lumotlari, tashxislar, tibbiy belgilar.
+4.  medicines — Dorilar ombori va zaxira minimum miqdorlari.
+5.  services — Klinika tomonidan taqdim etiladigan xizmatlar va narxlari.
+6.  finances — Kunlik daromad, xarajat va bemorlar soni.
+7.  payments — Bemorlar tomonidan qilingan to'lovlar va ularning usullari.
+8.  prescriptionQueue — Shifokorlar tomonidan yozilgan retseptlar navbati.
+9.  notifications — Kam qolgan dorilar yoki yangi retseptlar bildirishnomalari.
+10. activityLog — Tizimda kim qanday amal bajarganligi haqidagi loglar.
+11. clinicSettings — Klinika nomi, telefon raqami va ish vaqtlari sozlamalari.
+12. callLog — Qabul qilingan qo'ng'iroqlar jurnali.
+13. suppliers — Dori-darmon yetkazib beruvchi hamkorlar.
+14. sessions — Tizimga kirgan foydalanuvchilarning xavfsiz seans tokenlari.
+
+--------------------------------------------------------------------
+3. TIZIM ROLLAR TIZIMI VA INTEGRATSIYASI
+--------------------------------------------------------------------
+
+A. ADMINISTRATOR PANELI (AdminPanel.js)
+   * Dashboard: Bugungi qabul, daromad va navbatdagilar ko'rsatkichlari.
+   * Xodimlar: Yangi shifokorlar, hamshiralarni qo'shish va parollarini o'rnatish.
+   * Xonalar: Stasionar xonalarni boshqarish (bo'sh/band/ta'mirda).
+   * Moliya: Kassa va to'lovlar hisobi, qarzlar ro'yxati.
+   * Maosh & KPI: Shifokorlar xizmat ko'rsatgan bemoriga, hamshiralar esa
+     ishlagan soatiga qarab avtomatik KPI bonuslarini hisoblash va to'lash.
+   * Kengaytirilgan Hisobotlar: Moliya, shifokorlar, yosh va viloyat
+     demografiyasi, xonalar bandligi hamda dori-darmon zaxirasi hisobotlari.
+   * Sozlamalar: Klinika rekvizitlarini o'zgartirish va bazani backup qilish.
+
+B. SHIFOKOR PANELI (DoctorPanel.js)
+   * Bemorlar navbati: Unga tayinlangan faol bemorlar ro'yxati.
+   * Tibbiy ko'rik: Bemorga tashxis qo'yish, EKG/tahlil tayinlash va retsept yozish.
+
+C. HAMSHIRA PANELI (NursePanel.js)
+   * Stasionardagi bemorlarni nazorat qilish.
+   * Harorat, qon bosimi kabi vital belgilarni o'lchash va kiritish.
+   * Shifokor tayinlagan dorilarni berish va muolajalarni bajarish.
+
+D. QABULXONA PANELI (ReceptionPanel.js)
+   * Yangi bemorlarni ro'yxatga olish, ticket raqam berish va navbatga qo'shish.
+   * To'lovlarni qabul qilish (Naqd, Karta, Sug'urta orqali).
+   * Qo'ng'iroqlar jurnalini yuritish.
+
+--------------------------------------------------------------------
+4. XAVFSIZLIK VA OPTIMALLASHTIRISH (2.2 & 2.3)
+--------------------------------------------------------------------
+* Parollar serverda `crypto` (PBKDF2) yordamida ishonchli tarzda heshlanadi.
+* Autentifikatsiya Next.js cookies orqali HttpOnly holatida tekshiriladi.
+* So'rovlar to'liq optimallashtirilgan bo'lib, har bir o'zgarish (bemorni
+  yangilash, xizmat qo'shish) bazaga alohida-alohida (atomically) yoziladi.
+====================================================================

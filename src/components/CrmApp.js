@@ -42,7 +42,7 @@ export default function CrmApp() {
 
   useEffect(() => {
     if (initialized && !booting) {
-      setFadeOut(true);
+      setTimeout(() => setFadeOut(true), 0);
       const timer = setTimeout(() => {
         setShowApp(true);
       }, 500); // 500ms fade-out duration

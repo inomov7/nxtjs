@@ -1,0 +1,117 @@
+====================================================================
+           ANDROID SMS SERVER INTEGRATION & MODIFICATION GUIDE
+====================================================================
+
+Ushbu yo'riqnoma sizning Android (Kotlin / Jetpack Compose / Ktor) 
+ilovangizni Hayot Klinikasi CRM tizimining yangi yaratilgan SMS API-ga
+moslashtirish uchun yozildi.
+
+--------------------------------------------------------------------
+1. SERVER BILAN INTEGRATSIYA USULI (API Polling)
+--------------------------------------------------------------------
+Android ilovangiz (ApiClient.kt orqali) har 5 yoki 10 daqiqada (yoki 
+sozlamada belgilangan vaqtda) CRM serverining quyidagi manziliga GET 
+so'rov yuborishi kerak:
+
+* URL Manzil: http://[CRM_SERVER_IP]:3000/api/sms
+* HTTP Metod: GET
+
+CRM yuboradigan JSON javob formati (Pending SMS list):
+[
+  {
+    "id": "SMS-TRT-2026-12345-0",
+    "phone": "+998901234567",
+    "message": "Hurmatli Aziz Sobirov, bugun soat 17:00 da sizda Fizioterapiya seansi bor. Kelishingizni kutamiz. Tel: +998 71 200 00 01",
+    "sim": 0
+  },
+  {
+    "id": "SMS-CAM-17865239121-1",
+    "phone": "+998909876543",
+    "message": "Salom, bu +998909876543 sizmi?",
+    "sim": 1
+  }
+]
+
+Sizning Android kodingizda (ApiClient.kt yoki oxshash joyda) quyidagi 
+ma'lumotlar modelini (Data Class) yarating:
+
+data class SmsTask(
+    val id: String,
+    val phone: String,
+    val message: String,
+    val sim: Int
+)
+
+--------------------------------------------------------------------
+2. SMS YUBORIB BO'LGANDAN KEYIN QAYTA ALOQA (Status Callback)
+--------------------------------------------------------------------
+Android ilova xabarni telefondagi SIM-kartadan yuborganidan so'ng, xabarning 
+yuborilganligi (sent) yoki xatolik bilan muvaffaqiyatsiz bo'lganligi (failed)
+haqida darhol CRM tizimiga HTTP POST so'rovi yuborishi lozim.
+
+* URL Manzil: http://[CRM_SERVER_IP]:3000/api/sms
+* HTTP Metod: POST
+* Content-Type: application/json
+
+A. Muvaffaqiyatli yuborilganda yuboriladigan JSON body:
+{
+  "id": "SMS-TRT-2026-12345-0",
+  "status": "sent"
+}
+
+B. Xatolik (masalan, balans yetarli emas yoki sim ishlamadi) bo'lganda JSON body:
+{
+  "id": "SMS-TRT-2026-12345-0",
+  "status": "failed",
+  "error": "Sim card error: Network busy"
+}
+
+* KOD NAMUNASI (Kotlin + Ktor Client):
+
+suspend fun reportSmsStatus(smsId: String, isSuccess: Boolean, errorMsg: String? = null) {
+    val client = HttpClient(OkHttp)
+    try {
+        val response = client.post("http://[CRM_SERVER_IP]:3000/api/sms") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf(
+                "id" to smsId,
+                "status" to if (isSuccess) "sent" else "failed",
+                "error" to errorMsg
+            ))
+        }
+        if (response.status.value in 200..299) {
+            Log.d("SmsSender", "Status successfully reported back to CRM")
+        }
+    } catch (e: Exception) {
+        Log.e("SmsSender", "Failed to report status to CRM: ${e.message}")
+    } finally {
+        client.close()
+    }
+}
+
+--------------------------------------------------------------------
+3. DUAL SIM SOZLAMALARI
+--------------------------------------------------------------------
+CRM-dan keladigan har bir xabarda "sim" maydoni bo'ladi (0 yoki 1).
+0 - SIM-1 uyasi
+1 - SIM-2 uyasi
+
+Android-da SMS yuboruvchi kodingizda (SmsSender.kt) kelgan sim qiymatiga 
+qarab tegishli SubscriptionInfo ID-ni olish uchun quyidagicha kod yozing:
+
+val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+val activeSubscriptionInfoList = subscriptionManager.activeSubscriptionInfoList
+
+val targetSubscriptionInfo = if (simSlot == 1 && activeSubscriptionInfoList.size > 1) {
+    activeSubscriptionInfoList[1] // SIM-2
+} else {
+    activeSubscriptionInfoList[0] // SIM-1
+}
+
+val smsManager = context.getSystemService(SmsManager::class.java).createForSubscriptionId(targetSubscriptionInfo.subscriptionId)
+smsManager.sendTextMessage(phone, null, message, sentIntent, deliveryIntent)
+
+--------------------------------------------------------------------
+Siz ushbu o'zgarishlarni kiritganingizdan so'ng mobil ilovangiz to'liq CRM
+tizimi bilan avtomatlashtirilgan tarzda ishlaydigan bo'ladi!
+====================================================================

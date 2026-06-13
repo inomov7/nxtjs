@@ -5,13 +5,13 @@ import { useCrm } from '@/lib/CrmContext';
 import { ROLES, MEDICINE_CATEGORIES, generateId } from '@/lib/demoData';
 import {
   Sidebar, Header, StatCard, Modal, TabNav, useToast,
-  formatMoney, formatDate, getAge, EmptyState,
+  formatMoney, formatDate, getAge, EmptyState, ProfileSettings
 } from './SharedComponents';
 import {
   Calendar, Stethoscope, BedDouble, FolderOpen, BookOpen,
   Clock, CheckCircle, XCircle, AlertCircle, Play, Eye,
   Plus, FileText, Pill, Search, User, Activity, ClipboardList,
-  Upload, Download, Trash2,
+  Upload, Download, Trash2, Settings, Printer
 } from 'lucide-react';
 
 const getFileIcon = (name) => {
@@ -30,6 +30,7 @@ const TABS = [
   { key: 'inpatients', label: 'Stasionar', icon: <BedDouble size={18} /> },
   { key: 'history', label: 'Bemor Tarixi', icon: <FolderOpen size={18} /> },
   { key: 'diary', label: 'Kundalik', icon: <BookOpen size={18} /> },
+  { key: 'settings', label: 'Sozlamalar', icon: <Settings size={18} /> },
 ];
 
 const QUEUE_STATUSES = [
@@ -57,6 +58,12 @@ export default function DoctorPanel() {
         {activeTab === 'inpatients' && <InpatientsSection onSelectPatient={handleStartExam} />}
         {activeTab === 'history' && <PatientHistorySection />}
         {activeTab === 'diary' && <DoctorDiary />}
+        {activeTab === 'settings' && (
+          <div>
+            <Header title="Sozlamalar" role="doctor" />
+            <ProfileSettings />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -64,18 +71,18 @@ export default function DoctorPanel() {
 
 // ===== QUEUE =====
 function QueueSection({ onStartExam }) {
-  const { patients, updatePatient, staff } = useCrm();
+  const { patients, updatePatient, staff, user } = useCrm();
   const toast = useToast();
   const today = new Date().toISOString().split('T')[0];
 
   const queuePatients = useMemo(() => {
     return patients
-      .filter(p => p.admissionDate === today && (p.queueStatus === 'waiting' || p.queueStatus === 'in-progress' || p.queueStatus === 'completed' || p.queueStatus === 'no-show'))
+      .filter(p => p.admissionDate === today && p.assignedDoctor === user?.id && (p.queueStatus === 'waiting' || p.queueStatus === 'in-progress' || p.queueStatus === 'completed' || p.queueStatus === 'no-show'))
       .sort((a, b) => {
         const order = { 'in-progress': 0, 'waiting': 1, 'completed': 2, 'no-show': 3 };
         return (order[a.queueStatus] || 9) - (order[b.queueStatus] || 9);
       });
-  }, [patients, today]);
+  }, [patients, today, user]);
 
   const handleStatusChange = (patient, newStatus) => {
     updatePatient(patient.id, { queueStatus: newStatus });
@@ -150,7 +157,7 @@ function QueueSection({ onStartExam }) {
 
 // ===== EXAMINE SECTION =====
 function ExamineSection({ patient, onBack }) {
-  const { updatePatient, medicines, addPrescription, rooms, updateRoom, staff, addActivityLogEntry, addNotification, patients } = useCrm();
+  const { updatePatient, medicines, addPrescription, rooms, updateRoom, staff, addActivityLogEntry, addNotification, patients, updateStaff } = useCrm();
   const toast = useToast();
   const [complaints, setComplaints] = useState('');
   const [examination, setExamination] = useState('');
@@ -229,10 +236,22 @@ function ExamineSection({ patient, onBack }) {
     const newPrescriptions = prescriptions.map(rx => ({ ...rx, date: today }));
     const updatedPrescriptions = [...(patient.prescriptions || []), ...newPrescriptions];
 
+    // Add treatments
+    const newTreatments = treatments.map(t => ({
+      type: 'Shifokor buyurtmasi',
+      name: t,
+      time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+      status: 'pending',
+      nurse: null,
+      date: today
+    }));
+    const updatedTreatments = [...(patient.treatments || []), ...newTreatments];
+
     // Update patient
     const updates = {
       visits: updatedVisits,
       prescriptions: updatedPrescriptions,
+      treatments: updatedTreatments,
       queueStatus: 'completed',
       files: [...(patient.files || []), ...files],
     };
@@ -247,6 +266,8 @@ function ExamineSection({ patient, onBack }) {
         const isFull = (roomPatientsCount + 1) >= roomObj.capacity;
         updateRoom(selectedRoom, { status: isFull ? 'busy' : 'free' });
       }
+    } else {
+      updates.status = 'ambulatoriya';
     }
 
     if (nextVisit) {
@@ -254,6 +275,12 @@ function ExamineSection({ patient, onBack }) {
     }
 
     updatePatient(patient.id, updates);
+
+    // Update doctor's patientsServed count
+    const docObj = staff.find(s => s.id === patient.assignedDoctor);
+    if (docObj) {
+      updateStaff(patient.assignedDoctor, { patientsServed: (docObj.patientsServed || 0) + 1 });
+    }
 
     // Send prescription to pharmacy
     if (prescriptions.length > 0) {
@@ -502,6 +529,21 @@ function ExamineSection({ patient, onBack }) {
       {/* Save Buttons */}
       <div className="flex justify-end gap-3 mt-6 no-print">
         <button className="btn btn-outline" onClick={onBack}>Ortga</button>
+        {prescriptions.length > 0 && (
+          <button className="btn btn-outline" onClick={() => {
+            const doc = staff.find(s => s.id === patient.assignedDoctor);
+            const docName = doc ? `Dr. ${doc.lastName} ${doc.firstName}` : 'Shifokor';
+            const docSpec = doc?.specialization || '';
+            const printWindow = window.open('', '_blank', 'width=400,height=700');
+            if (!printWindow) { toast('Popup bloklangan', 'error'); return; }
+            const rxRows = prescriptions.map((rx, i) => `<tr><td>${i+1}</td><td><b>${rx.medicine}</b></td><td>${rx.dose}</td><td>${rx.frequency}</td><td>${rx.duration}</td><td>${rx.instructions || ''}</td></tr>`).join('');
+            const html = `<!DOCTYPE html><html><head><title>Retsept</title><style>@page{size:80mm auto;margin:0}body{font-family:'Courier New',monospace;width:72mm;margin:0 auto;padding:8px 4px;font-size:11px;color:#000}.header{font-size:14px;font-weight:bold;text-align:center;text-transform:uppercase;margin-bottom:2px}.divider{border-top:1px dashed #000;margin:6px 0}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border-bottom:1px dotted #ccc;padding:3px 2px;text-align:left}th{font-size:9px;text-transform:uppercase;color:#555}.footer{font-size:9px;text-align:center;margin-top:10px;font-style:italic}</style></head><body><div class="header">HAYOT KLINIKASI</div><div style="text-align:center;font-size:10px">RETSEPT</div><div class="divider"></div><div style="font-size:10px;margin-bottom:4px"><b>Bemor:</b> ${patient.lastName} ${patient.firstName}<br><b>Yosh:</b> ${getAge(patient.birthDate)} | <b>ID:</b> ${patient.id}<br><b>Shifokor:</b> ${docName} (${docSpec})<br><b>Sana:</b> ${new Date().toLocaleDateString('uz-UZ')}</div><div class="divider"></div><table><thead><tr><th>#</th><th>Dori</th><th>Doza</th><th>Qabul</th><th>Muddat</th><th>Ko'rsatma</th></tr></thead><tbody>${rxRows}</tbody></table><div class="divider"></div><div class="footer">Sog'ligingiz — bizning baxtimiz!<br>Ushbu retsept faqat shifokor tomonidan beriladi.</div><script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)};</script></body></html>`;
+            printWindow.document.write(html);
+            printWindow.document.close();
+          }}>
+            <Printer size={16} /> Retseptni chop etish
+          </button>
+        )}
         <button className="btn btn-success btn-lg" onClick={handleSave}>
           <CheckCircle size={18} /> Qabulni yakunlash
         </button>
@@ -512,11 +554,11 @@ function ExamineSection({ patient, onBack }) {
 
 // ===== INPATIENTS =====
 function InpatientsSection({ onSelectPatient }) {
-  const { patients, rooms, staff } = useCrm();
+  const { patients, rooms, staff, user } = useCrm();
 
   const inpatients = useMemo(() => {
-    return patients.filter(p => p.status === 'stasionar');
-  }, [patients]);
+    return patients.filter(p => p.status === 'stasionar' && p.assignedDoctor === user?.id);
+  }, [patients, user]);
 
   return (
     <div>
@@ -692,15 +734,15 @@ function PatientHistorySection() {
 
 // ===== DOCTOR DIARY =====
 function DoctorDiary() {
-  const { patients } = useCrm();
+  const { patients, user } = useCrm();
   const today = new Date().toISOString().split('T')[0];
 
   const todayStats = useMemo(() => {
-    const todayPatients = patients.filter(p => p.admissionDate === today);
+    const todayPatients = patients.filter(p => p.admissionDate === today && p.assignedDoctor === user?.id);
     const completed = todayPatients.filter(p => p.queueStatus === 'completed').length;
     const prescriptions = todayPatients.reduce((s, p) => s + (p.prescriptions?.filter(rx => rx.date === today).length || 0), 0);
     return { total: todayPatients.length, completed, prescriptions };
-  }, [patients, today]);
+  }, [patients, today, user]);
 
   return (
     <div>
@@ -715,7 +757,7 @@ function DoctorDiary() {
       <div className="card p-5">
         <h4 className="font-bold text-gray-900 mb-3">Bugungi qabul qilingan bemorlar</h4>
         <div className="space-y-2">
-          {patients.filter(p => p.admissionDate === today && p.queueStatus === 'completed').map(p => (
+          {patients.filter(p => p.admissionDate === today && p.assignedDoctor === user?.id && p.queueStatus === 'completed').map(p => (
             <div key={p.id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
               <div>
                 <p className="font-medium text-gray-900 text-sm">{p.firstName} {p.lastName}</p>

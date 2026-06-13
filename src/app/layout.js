@@ -1,5 +1,7 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { CrmProvider } from '@/lib/CrmContext';
+import { ToastProvider } from '@/components/SharedComponents';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -14,8 +16,14 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="uz" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+    <html lang="uz" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="min-h-full flex flex-col font-sans">
+        <CrmProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
+        </CrmProvider>
+      </body>
     </html>
   );
 }

@@ -1,0 +1,67 @@
+Ushbu loyiha — SMS Server Android ilovasi bo'lib, u har qanday Android qurilmani (telefonni) shaxsiy yoki biznes ehtiyojlari (masalan, sizda ochiq turgan 
+
+CrmApp.js
+ "Hayot Klinikasi" CRM tizimi kabi ilovalar) uchun **SMS Gateway (SMS shlyuzi)**ga aylantirib beradi.
+
+Ilova yordamida tashqi tizimlar (veb-saytlar, CRM, turli skriptlar va API-lar) mobil telefondagi SIM-kartalardan foydalangan holda mijozlarga avtomatik ravishda SMS xabarlar jo'natishi mumkin.
+
+Dasturning to'liq arxitekturasi va ishlash tizimi haqida batafsil ma'lumot:
+
+1. Asosiy ishlash rejimlari (Modes of Operation)
+Ilova ikki xil usulda tashqi tizimlar bilan integratsiya qiladi:
+
+A. Local HTTP Server (Ktor/Netty) — Ichki veb-server rejimi
+Ilova telefonda lokal veb-serverni ishga tushiradi (masalan, http://192.168.1.100:8080 manzilida). 
+
+SmsHttpServer.kt
+ faylida quyidagi API endpointlar yaratilgan:
+
+GET /status: Server holati, port va bugun jo'natilgan SMS-lar sonini bilish.
+POST /send: Bitta raqamga SMS yuborish. JSON formatida qabul qiladi:
+json
+{
+  "phone": "+998901234567",
+  "message": "Sizning shifokor qabulingiz soat 14:00 da.",
+  "sim": 0 
+}
+POST /send-bulk: Ko'p sonli raqamlarga guruhli SMS yuborish.
+GET /logs: Bugun jo'natilgan barcha SMS-lar statistikasini olish.
+B. API Polling (Tashqi serverdan yuklab olish rejimi)
+Agar sizning CRM serveringizda jo'natilishi kerak bo'lgan SMS-lar navbati (queue) mavjud bo'lsa, ilova 
+
+ApiClient.kt
+ orqali ushbu serverga muntazam so'rov yuborib, jo'natilishi kerak bo'lgan xabarlarni yuklab oladi va telefondan jo'natadi.
+
+2. Muhim Funksiyalar va Imkoniyatlar
+Dual SIM (Ikki SIM-karta) qo'llab-quvvatlanishi: SMS-larni qaysi slotdagi SIM-kartadan (sim: 0 yoki sim: 1) jo'natishni dasturlash imkoniyati mavjud.
+Status Callback (Holat bo'yicha javob qaytarish): SMS telefon tomonidan muvaffaqiyatli yuborilgani yoki xatolik bilan muvaffaqiyatsiz bo'lganligi haqida ma'lumotni darhol sizning serveringizga HTTP POST so'rovi orqali yetkazadi.
+Background (Orqa fon) barqarorligi: Android tizimi ilovani o'chirib qo'ymasligi uchun u 
+
+SmsServerService.kt
+ nomli doimiy faol bildirishnomali (Foreground Service) xizmatdan foydalanadi.
+SMS Delay & Retries (Kechikish va Qayta urinishlar):
+Telekommunikatsiya operatorlari telefonni spam uchun bloklab qo'ymasligi uchun xabarlar orasidagi kechikish vaqti (delay) sozlanadi.
+Tarmoq yoki sim-karta vaqtinchalik ishlamay qolganda, xabarni yuborish uchun qayta urinishlar soni sozlanadi (
+
+SmsSender.kt
+).
+Local Database (Room): Jo'natilgan, kutilayotgan (PENDING) va xatolik bergan (FAILED) xabarlar telefondagi Room ma'lumotlar bazasida saqlanadi.
+3. Dasturning Texnik Steki (Tech Stack)
+Dasturlash tili: Kotlin (Android Native)
+UI (Foydalanuvchi interfeysi): Jetpack Compose (Modern Material 3 dizayni). Unda tarmoq holati, IP manzil, SIM-kartalar holati va statistika diagrammasi (
+
+FlowDiagram.kt
+) chiroyli ko'rsatiladi.
+HTTP Server & Client: Ktor (Netty va OkHttp drayverlari bilan).
+Lokal Ma'lumotlar Bazasi: Room Database (SMS loglarini saqlash uchun).
+Sozlamalar saqlagichi: DataStore (server porti, kunlik limit, kechikish sozlamalari va API ulanish manzillarini xavfsiz saqlaydi).
+4. Ma'lumotlar Aylanmasi Diagrammasi (Data Flow)
+Dastur interfeysidagi 
+
+FlowDiagram.kt
+ komponentiga ko'ra oqim quyidagicha ishlaydi:
+
+Sizning Serveringiz/CRM (Hayot Klinikasi) $\rightarrow$ HTTP request yordamida SMS ma'lumotlarini jo'natadi.
+Ushbu Android ilova $\rightarrow$ So'rovni qabul qilib navbatga qo'yadi va mahalliy bazaga yozadi.
+SMS Jo'natish $\rightarrow$ Belgilangan SIM-karta orqali operator tarmog'idan SMS yuboriladi.
+Callback $\rightarrow$ SMS holati (yuborildi/xatolik) qayta ishlanib, sizning serveringizga xabar qilinadi.

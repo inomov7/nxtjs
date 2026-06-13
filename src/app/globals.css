@@ -1,6 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+
 
 @theme inline {
   --color-primary: #007AFF;
@@ -94,6 +97,59 @@
       border-color: var(--border-color) !important;
       color: var(--text-primary) !important;
     }
+
+    /* Segmented Control / TabNav in dark mode */
+    .tab-nav {
+      background: #1C1C1E !important;
+      border: 1px solid var(--border-color);
+    }
+    .tab-item {
+      color: #8E8E93 !important;
+    }
+    .tab-item:hover {
+      color: #F5F5F7 !important;
+    }
+    .tab-item.active {
+      background: #2C2C2E !important;
+      color: #F5F5F7 !important;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* Hover states for lists and buttons in dark mode to prevent turning white */
+    .hover\:bg-gray-50:hover, 
+    .hover\:bg-gray-100:hover, 
+    .hover\:bg-slate-50:hover,
+    .hover\:bg-green-50\/5:hover,
+    .hover\:bg-white\/10:hover {
+      background-color: rgba(255, 255, 255, 0.04) !important;
+    }
+    .hover\:bg-gray-200:hover {
+      background-color: rgba(255, 255, 255, 0.08) !important;
+    }
+    .hover\:bg-red-50:hover {
+      background-color: rgba(255, 59, 48, 0.1) !important;
+    }
+
+    /* Unread notification tint in dark mode */
+    .bg-blue-50\/50 {
+      background-color: rgba(0, 122, 255, 0.12) !important;
+    }
+
+    /* Solid color-blended backgrounds for StatCards in dark mode */
+    .stat-blue { background: linear-gradient(rgba(0, 122, 255, 0.06), rgba(0, 122, 255, 0.06)), var(--bg-card) !important; }
+    .stat-green { background: linear-gradient(rgba(52, 199, 89, 0.06), rgba(52, 199, 89, 0.06)), var(--bg-card) !important; }
+    .stat-red { background: linear-gradient(rgba(255, 59, 48, 0.06), rgba(255, 59, 48, 0.06)), var(--bg-card) !important; }
+    .stat-yellow { background: linear-gradient(rgba(255, 149, 0, 0.06), rgba(255, 149, 0, 0.06)), var(--bg-card) !important; }
+    .stat-purple { background: linear-gradient(rgba(175, 82, 222, 0.06), rgba(175, 82, 222, 0.06)), var(--bg-card) !important; }
+    .stat-indigo { background: linear-gradient(rgba(88, 86, 214, 0.06), rgba(88, 86, 214, 0.06)), var(--bg-card) !important; }
+
+    /* Legible Badge Text & Background Colors in dark mode */
+    .badge-success { color: #30D158 !important; background: rgba(48, 209, 88, 0.15) !important; }
+    .badge-danger { color: #FF453A !important; background: rgba(255, 69, 58, 0.15) !important; }
+    .badge-warning { color: #FF9F0A !important; background: rgba(255, 159, 10, 0.15) !important; }
+    .badge-info { color: #0A84FF !important; background: rgba(10, 132, 255, 0.15) !important; }
+    .badge-purple { color: #BF5AF2 !important; background: rgba(191, 90, 242, 0.15) !important; }
+    .badge-gray { color: #AEAEB2 !important; background: rgba(174, 174, 178, 0.15) !important; }
   }
 
   h1, h2, h3, h4, h5, h6, .font-bold {
@@ -520,6 +576,12 @@
   color: var(--text-primary);
 }
 
+/* Fix overlapping icon and input placeholder/text */
+.relative .absolute ~ .input,
+.relative .absolute ~ select.input {
+  padding-left: 38px !important;
+}
+
 .input:focus {
   border-color: #007AFF;
   background: var(--bg-input);
@@ -737,23 +799,35 @@
 
   .main-content {
     margin-left: 0;
-    padding: 24px;
+    padding: 20px;
   }
 
   .sidebar-toggle-btn {
     display: inline-flex;
   }
+
+  /* Stat cards 2-col on tablets */
+  .lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
 
 @media (max-width: 768px) {
   .main-content {
-    padding: 16px;
+    padding: 14px;
   }
   
   /* Tables scroll horizontally instead of clipping */
   .card, div:has(> .data-table) {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* data-table compact on tablet */
+  .data-table thead th,
+  .data-table tbody td {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
   }
   
   /* Stack/adjust grids on tablets */
@@ -771,11 +845,22 @@
   .lg\:grid-cols-7 {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
+
+  /* KPI balance cards — 2 per row on tablet */
+  .xl\:grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* ProfileSettings — stack lg-col-span on tablet */
+  .lg\:col-span-5,
+  .lg\:col-span-7 {
+    grid-column: span 12 / span 12 !important;
+  }
 }
 
 @media (max-width: 640px) {
   .main-content {
-    padding: 12px;
+    padding: 10px;
   }
 
   /* Grid stacking for narrow mobile screens */
@@ -785,7 +870,8 @@
   .grid-cols-3,
   .md\:grid-cols-3,
   .lg\:grid-cols-7,
-  .grid-cols-2 {
+  .xl\:grid-cols-3,
+  .md\:grid-cols-2 {
     grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
   }
 
@@ -796,14 +882,26 @@
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
+  /* Stat cards 2-col on mobile */
+  .grid-cols-2.lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Profile cols full-width on mobile */
+  .lg\:col-span-5,
+  .lg\:col-span-7,
+  .lg\:col-span-12 {
+    grid-column: span 12 / span 12 !important;
+  }
+
   /* Optimize Login Screen for small screens */
   .login-card {
-    padding: 32px 20px !important;
-    border-radius: 24px !important;
+    padding: 28px 16px !important;
+    border-radius: 20px !important;
   }
   
   .login-bg {
-    padding: 16px !important;
+    padding: 12px !important;
   }
 
   /* iOS-Style slide up bottom sheet modal */
@@ -814,7 +912,7 @@
 
   .modal-content {
     border-radius: 24px 24px 0 0 !important;
-    max-height: 90vh !important;
+    max-height: 92vh !important;
     width: 100% !important;
     margin-bottom: 0 !important;
     animation: slideUpSheet 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
@@ -832,15 +930,50 @@
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;
     padding: 4px;
+    scrollbar-width: none;
   }
+  .tab-nav::-webkit-scrollbar { display: none; }
   
   .tab-item {
     flex: 0 0 auto;
+    padding: 7px 12px;
+  }
+
+  /* Sidebar items scroll horizontally */
+  .sidebar-item span.sidebar-text {
+    display: block !important;
   }
   
   /* Spacing adjustments */
   .mb-6 {
-    margin-bottom: 16px !important;
+    margin-bottom: 14px !important;
+  }
+
+  /* Header title smaller on mobile */
+  .text-2xl {
+    font-size: 1.2rem !important;
+  }
+
+  /* Button text wrapping fix */
+  .btn {
+    white-space: nowrap;
+  }
+
+  /* data-table compact on mobile */
+  .data-table thead th,
+  .data-table tbody td {
+    padding: 9px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* Floor room grid — always 2 per row */
+  .grid-cols-2.md\:grid-cols-3.lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Payment type selector grid in modal — 3 per row */
+  .grid-cols-3.sm\:grid-cols-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
 
@@ -880,4 +1013,9 @@ button:focus-visible,
 [role="button"]:focus-visible {
   outline: 3px solid var(--active-accent, #007AFF) !important;
   outline-offset: 2px !important;
+}
+
+/* Extra smooth scrolling on all overflow areas */
+* {
+  -webkit-overflow-scrolling: touch;
 }

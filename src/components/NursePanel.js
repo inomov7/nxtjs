@@ -5,13 +5,13 @@ import { useCrm } from '@/lib/CrmContext';
 import { ROLES, ROOM_STATUSES, DIET_TYPES, generateId } from '@/lib/demoData';
 import {
   Sidebar, Header, StatCard, Modal, useToast, TabNav,
-  formatMoney, formatDate, getAge, EmptyState, ConfirmDialog,
+  formatMoney, formatDate, getAge, EmptyState, ConfirmDialog, ProfileSettings
 } from './SharedComponents';
 import {
   Map, Activity, ClipboardList, ArrowRightLeft, CheckSquare,
   Thermometer, Heart, Droplets, Wind, Plus, XCircle, CheckCircle,
   AlertTriangle, Clock, Pill, Utensils, FileText, Send, Bell,
-  BedDouble, User, ChevronRight, Eye, AlertCircle,
+  BedDouble, User, ChevronRight, Eye, AlertCircle, Settings
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -21,6 +21,7 @@ const TABS = [
   { key: 'floorplan', label: 'Palatalar Xaritasi', icon: <Map size={18} /> },
   { key: 'tasks', label: 'Vazifalar', icon: <CheckSquare size={18} /> },
   { key: 'shift', label: 'Shift Topshirish', icon: <ArrowRightLeft size={18} /> },
+  { key: 'settings', label: 'Sozlamalar', icon: <Settings size={18} /> },
 ];
 
 const SOS_REASONS = ["Yurak to'xtadi", "Nafas yo'q", "Qon ketmoqda", "Ong yo'q", 'Boshqa'];
@@ -37,6 +38,12 @@ export default function NursePanel() {
         {activeTab === 'floorplan' && selectedPatient && <PatientMonitor patient={selectedPatient} onBack={() => setSelectedPatient(null)} />}
         {activeTab === 'tasks' && <NurseTasks />}
         {activeTab === 'shift' && <ShiftHandover />}
+        {activeTab === 'settings' && (
+          <div>
+            <Header title="Sozlamalar" role="nurse" />
+            <ProfileSettings />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -117,19 +124,29 @@ function FloorPlan({ onSelectPatient }) {
 
 // ===== PATIENT MONITOR =====
 function PatientMonitor({ patient, onBack }) {
-  const { updatePatient, patients, rooms, updateRoom, staff, addNotification, addActivityLogEntry } = useCrm();
+  const { updatePatient, patients, rooms, updateRoom, staff, user, addNotification, addActivityLogEntry, addPatientHistoryEvent } = useCrm();
   const toast = useToast();
   const [subTab, setSubTab] = useState('vitals');
   const [showVitalModal, setShowVitalModal] = useState(false);
   const [showSOS, setShowSOS] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showDischargeConfirm, setShowDischargeConfirm] = useState(false);
+  const [showDietModal, setShowDietModal] = useState(false);
+  const [showInjectionModal, setShowInjectionModal] = useState(false);
+  const [injectionForm, setInjectionForm] = useState({ name: '', dose: '', method: 'Mushak ichiga' });
 
   const [vitalForm, setVitalForm] = useState({
     temperature: '', bloodPressure: '', pulse: '', respRate: '', spo2: '', sugar: '', weight: '',
   });
   const [noteForm, setNoteForm] = useState({ shift: 'Tonggi', note: '' });
   const [sosReason, setSosReason] = useState('');
+  const [dietForm, setDietForm] = useState({
+    type: 'Umumiy',
+    restrictions: '',
+    breakfastTime: '08:00',
+    lunchTime: '13:00',
+    dinnerTime: '18:00'
+  });
 
   const handleDischarge = () => {
     updatePatient(patient.id, { roomId: null, status: 'tuzalgan', expectedDischarge: new Date().toISOString().split('T')[0] });
@@ -142,6 +159,12 @@ function PatientMonitor({ patient, onBack }) {
         updateRoom(roomObj.id, { status: 'free' });
       }
     }
+
+    addPatientHistoryEvent(patient.id, {
+      type: 'discharge',
+      title: 'Klinikadan javob berildi',
+      details: 'Bemor tuzalib shifoxonadan chiqarildi'
+    });
 
     toast('Bemor shifoxonadan chiqarildi', 'success');
     addActivityLogEntry({ user: 'Hamshira', action: 'Bemor shifoxonadan chiqarildi', target: `${patient.firstName} ${patient.lastName}` });
@@ -157,7 +180,7 @@ function PatientMonitor({ patient, onBack }) {
   // Give medication
   const giveMedication = (idx) => {
     const meds = [...(patient.medications || [])];
-    meds[idx] = { ...meds[idx], status: 'given', nurse: 'STF-004', givenTime: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) };
+    meds[idx] = { ...meds[idx], status: 'given', nurse: user?.id, givenTime: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) };
     updatePatient(patient.id, { medications: meds });
     addActivityLogEntry({ user: 'Hamshira', action: 'Dori berildi', target: `${patient.firstName} ${patient.lastName} - ${meds[idx].name} ${meds[idx].dose}` });
     toast(`${meds[idx].name} berildi ✅`, 'success');
@@ -174,7 +197,7 @@ function PatientMonitor({ patient, onBack }) {
   // Complete treatment
   const completeTreatment = (idx) => {
     const treatments = [...(patient.treatments || [])];
-    treatments[idx] = { ...treatments[idx], status: 'done', nurse: 'STF-004' };
+    treatments[idx] = { ...treatments[idx], status: 'done', nurse: user?.id };
     updatePatient(patient.id, { treatments });
     toast(`${treatments[idx].name} - bajarildi ✅`, 'success');
   };
@@ -184,7 +207,7 @@ function PatientMonitor({ patient, onBack }) {
     const today = new Date().toISOString().split('T')[0];
     const time = new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
     const vital = {
-      time, date: today, nurse: 'STF-004',
+      time, date: today, nurse: user?.id,
       temperature: parseFloat(vitalForm.temperature) || null,
       bloodPressure: vitalForm.bloodPressure || null,
       pulse: parseInt(vitalForm.pulse) || null,
@@ -215,7 +238,7 @@ function PatientMonitor({ patient, onBack }) {
     if (!noteForm.note) { toast('Izoh kiriting', 'error'); return; }
     const today = new Date().toISOString().split('T')[0];
     const time = new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-    const newNote = { shift: noteForm.shift, time, note: noteForm.note, nurse: 'STF-004', date: today };
+    const newNote = { shift: noteForm.shift, time, note: noteForm.note, nurse: user?.id, date: today };
     updatePatient(patient.id, { nurseNotes: [...(patient.nurseNotes || []), newNote] });
     toast('Izoh saqlandi', 'success');
     setShowNoteModal(false);
@@ -225,8 +248,110 @@ function PatientMonitor({ patient, onBack }) {
   // Update meal status
   const toggleMeal = (meal) => {
     if (!patient.diet) return;
-    const meals = { ...(patient.diet.meals || {}), [meal]: !patient.diet.meals?.[meal] };
+    const isServed = !patient.diet.meals?.[meal];
+    const meals = { ...(patient.diet.meals || {}), [meal]: isServed };
     updatePatient(patient.id, { diet: { ...patient.diet, meals } });
+
+    if (isServed) {
+      const mealLabels = { breakfast: 'Nonushta', lunch: 'Tushlik', dinner: 'Kechki ovqat', tea: 'Choy' };
+      addPatientHistoryEvent(patient.id, {
+        type: meal === 'tea' ? 'tea' : 'meal',
+        title: `${mealLabels[meal]} berildi`,
+        details: `Bemorga parhez bo'yicha ${mealLabels[meal].toLowerCase()} tarqatildi`
+      });
+    }
+  };
+
+  const handleGiveTea = () => {
+    if (patient.diet) {
+      const meals = { ...(patient.diet.meals || {}), tea: true };
+      updatePatient(patient.id, { diet: { ...patient.diet, meals } });
+    }
+    addPatientHistoryEvent(patient.id, {
+      type: 'tea',
+      title: 'Choy berildi',
+      details: 'Bemorga issiq choy berildi'
+    });
+    addActivityLogEntry({ user: 'Hamshira', action: 'Choy berildi', target: `${patient.firstName} ${patient.lastName}` });
+    toast('Bemorga choy berildi ☕', 'success');
+  };
+
+  const handleExecuteInjection = () => {
+    if (!injectionForm.name) {
+      toast('Ukol nomini kiriting', 'error');
+      return;
+    }
+    addPatientHistoryEvent(patient.id, {
+      type: 'injection',
+      title: 'Ukol qilindi (Injeksiya)',
+      details: `${injectionForm.name} ukoli qilindi. Doza: ${injectionForm.dose || "1 ta"} (${injectionForm.method})`
+    });
+    
+    addActivityLogEntry({ user: 'Hamshira', action: 'Ukol qilindi', target: `${patient.firstName} ${patient.lastName} - ${injectionForm.name}` });
+
+    let updated = false;
+    const meds = [...(patient.medications || [])];
+    const medIdx = meds.findIndex(m => m.status === 'pending' && m.name.toLowerCase() === injectionForm.name.toLowerCase());
+    if (medIdx !== -1) {
+      meds[medIdx] = { ...meds[medIdx], status: 'given', nurse: user?.id, givenTime: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) };
+      updatePatient(patient.id, { medications: meds });
+      updated = true;
+    }
+    
+    if (!updated) {
+      const treatments = [...(patient.treatments || [])];
+      const treatIdx = treatments.findIndex(t => t.status === 'pending' && t.name.toLowerCase() === injectionForm.name.toLowerCase());
+      if (treatIdx !== -1) {
+        treatments[treatIdx] = { ...treatments[treatIdx], status: 'done', nurse: user?.id };
+        updatePatient(patient.id, { treatments });
+      }
+    }
+
+    toast(`Ukol qilindi: ${injectionForm.name} 💉`, 'success');
+    setShowInjectionModal(false);
+    setInjectionForm({ name: '', dose: '', method: 'Mushak ichiga' });
+  };
+
+  const handleOpenDietModal = () => {
+    if (patient.diet) {
+      setDietForm({
+        type: patient.diet.type || 'Umumiy',
+        restrictions: patient.diet.restrictions?.join(', ') || '',
+        breakfastTime: patient.diet.times?.breakfast || '08:00',
+        lunchTime: patient.diet.times?.lunch || '13:00',
+        dinnerTime: patient.diet.times?.dinner || '18:00'
+      });
+    } else {
+      setDietForm({
+        type: 'Umumiy',
+        restrictions: '',
+        breakfastTime: '08:00',
+        lunchTime: '13:00',
+        dinnerTime: '18:00'
+      });
+    }
+    setShowDietModal(true);
+  };
+
+  const handleSaveDiet = () => {
+    const restrictionsArray = dietForm.restrictions
+      ? dietForm.restrictions.split(',').map(r => r.trim()).filter(Boolean)
+      : [];
+      
+    const updatedDiet = {
+      type: dietForm.type,
+      restrictions: restrictionsArray,
+      times: {
+        breakfast: dietForm.breakfastTime,
+        lunch: dietForm.lunchTime,
+        dinner: dietForm.dinnerTime
+      },
+      meals: patient.diet?.meals || { breakfast: false, lunch: false, dinner: false }
+    };
+
+    updatePatient(patient.id, { diet: updatedDiet });
+    toast('Parhez va ovqatlanish vaqtlari saqlandi', 'success');
+    setShowDietModal(false);
   };
 
   // Vitals chart data
@@ -271,6 +396,22 @@ function PatientMonitor({ patient, onBack }) {
           <span><b>Yotgan:</b> {formatDate(patient.admissionDate)}</span>
           <span><b>Chiqish:</b> {formatDate(patient.expectedDischarge) || '—'}</span>
           <span><b>Allergiya:</b> {patient.allergies?.length > 0 ? <span className="text-red-600">{patient.allergies.join(', ')}</span> : 'Yo\'q'}</span>
+        </div>
+      </div>
+
+      {/* Tezkor Amallar Card */}
+      <div className="card p-4 mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-100/50 dark:border-blue-900/30 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h4 className="font-bold text-blue-950 dark:text-blue-200 text-sm flex items-center gap-1.5">⚡ Tezkor Amallar</h4>
+          <p className="text-xs text-blue-800/80 dark:text-blue-300/60 mt-0.5">Bemor uchun choy berish va ukol (injeksiya) qilishni tezkor yozish</p>
+        </div>
+        <div className="flex gap-2">
+          <button className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-white border-none flex items-center gap-1.5" onClick={handleGiveTea}>
+            ☕ Choy berish
+          </button>
+          <button className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white border-none flex items-center gap-1.5" onClick={() => setShowInjectionModal(true)}>
+            💉 Ukol qilish
+          </button>
         </div>
       </div>
 
@@ -459,6 +600,12 @@ function PatientMonitor({ patient, onBack }) {
       {/* DIET */}
       {subTab === 'diet' && (
         <div className="card p-5">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-bold text-gray-900">Parhez va ovqatlanish</h4>
+            <button className="btn btn-outline btn-sm" onClick={handleOpenDietModal}>
+              <Plus size={14} /> {patient.diet ? 'Tahrirlash' : 'Tayinlash'}
+            </button>
+          </div>
           {patient.diet ? (
             <div>
               <div className="flex items-center gap-3 mb-4">
@@ -473,21 +620,34 @@ function PatientMonitor({ patient, onBack }) {
                 </div>
               )}
               <h5 className="text-sm font-medium text-gray-700 mb-2">Ovqatlanish:</h5>
-              <div className="grid grid-cols-3 gap-4">
-                {[['breakfast', 'Nonushta', '08:00'], ['lunch', 'Tushlik', '13:00'], ['dinner', 'Kechki', '18:00']].map(([key, label, time]) => (
-                  <div key={key} className={`card p-4 text-center cursor-pointer transition-all ${patient.diet.meals?.[key] ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`} onClick={() => toggleMeal(key)}>
-                    <Utensils size={24} className={`mx-auto mb-2 ${patient.diet.meals?.[key] ? 'text-green-500' : 'text-gray-300'}`} />
-                    <p className="font-medium text-sm">{label}</p>
-                    <p className="text-xs text-gray-500">{time}</p>
-                    <p className={`text-xs mt-1 font-medium ${patient.diet.meals?.[key] ? 'text-green-600' : 'text-gray-400'}`}>
-                      {patient.diet.meals?.[key] ? '✅ Yedi' : 'Yemadi'}
-                    </p>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {(() => {
+                  const times = patient.diet.times || { breakfast: '08:00', lunch: '13:00', dinner: '18:00' };
+                  return [
+                    ['breakfast', 'Nonushta', times.breakfast],
+                    ['lunch', 'Tushlik', times.lunch],
+                    ['dinner', 'Kechki', times.dinner],
+                    ['tea', 'Choy', '16:00']
+                  ].map(([key, label, time]) => (
+                    <div key={key} className={`card p-4 text-center cursor-pointer transition-all ${patient.diet.meals?.[key] ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`} onClick={() => toggleMeal(key)}>
+                      <Utensils size={24} className={`mx-auto mb-2 ${patient.diet.meals?.[key] ? 'text-green-500' : 'text-gray-300'}`} />
+                      <p className="font-medium text-sm">{label}</p>
+                      <p className="text-xs text-gray-500">{time}</p>
+                      <p className={`text-xs mt-1 font-medium ${patient.diet.meals?.[key] ? 'text-green-600' : 'text-gray-400'}`}>
+                        {patient.diet.meals?.[key] ? '✅ Yedi' : 'Yemadi'}
+                      </p>
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
           ) : (
-            <EmptyState icon={<Utensils size={48} />} title="Parhez tayinlanmagan" />
+            <div className="text-center py-6">
+              <EmptyState icon={<Utensils size={48} />} title="Parhez tayinlanmagan" />
+              <button className="btn btn-primary mt-4" onClick={handleOpenDietModal}>
+                <Plus size={16} /> Parhez tayinlash
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -601,6 +761,105 @@ function PatientMonitor({ patient, onBack }) {
         </div>
       </Modal>
 
+      {/* DIET MODAL */}
+      <Modal isOpen={showDietModal} onClose={() => setShowDietModal(false)} title="Parhez va ovqatlanish vaqtlarini belgilash">
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Parhez turi</label>
+            <select 
+              className="input select" 
+              value={dietForm.type} 
+              onChange={e => setDietForm({ ...dietForm, type: e.target.value })}
+            >
+              {DIET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Taqiqlar / Cheklovlar (vergul bilan ajrating)</label>
+            <input 
+              className="input" 
+              value={dietForm.restrictions} 
+              onChange={e => setDietForm({ ...dietForm, restrictions: e.target.value })}
+              placeholder="Tuz yo'q, Yog' cheklangan, Shirinlik mumkin emas"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Nonushta vaqti</label>
+              <input 
+                className="input" 
+                value={dietForm.breakfastTime} 
+                onChange={e => setDietForm({ ...dietForm, breakfastTime: e.target.value })}
+                placeholder="08:00"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Tushlik vaqti</label>
+              <input 
+                className="input" 
+                value={dietForm.lunchTime} 
+                onChange={e => setDietForm({ ...dietForm, lunchTime: e.target.value })}
+                placeholder="13:00"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Kechki ovqat vaqti</label>
+              <input 
+                className="input" 
+                value={dietForm.dinnerTime} 
+                onChange={e => setDietForm({ ...dietForm, dinnerTime: e.target.value })}
+                placeholder="18:00"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button className="btn btn-outline" onClick={() => setShowDietModal(false)}>Bekor qilish</button>
+          <button className="btn btn-primary" onClick={handleSaveDiet}>Saqlash</button>
+        </div>
+      </Modal>
+ 
+      {/* INJECTION MODAL */}
+      <Modal isOpen={showInjectionModal} onClose={() => setShowInjectionModal(false)} title="💉 Ukol qilish (Injeksiya yuborish)">
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Ukol (dori) nomi *</label>
+            <input 
+              className="input" 
+              placeholder="Masalan: Ketonal, Analgin, Sefazolin..." 
+              value={injectionForm.name} 
+              onChange={e => setInjectionForm({ ...injectionForm, name: e.target.value })} 
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Doza</label>
+            <input 
+              className="input" 
+              placeholder="Masalan: 2ml, 1 flakon, 1.0 gr..." 
+              value={injectionForm.dose} 
+              onChange={e => setInjectionForm({ ...injectionForm, dose: e.target.value })} 
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Yuborish uslubi</label>
+            <select 
+              className="input select" 
+              value={injectionForm.method} 
+              onChange={e => setInjectionForm({ ...injectionForm, method: e.target.value })}
+            >
+              <option>Mushak ichiga</option>
+              <option>Vena ichiga</option>
+              <option>Teri ostiga</option>
+              <option>Tomchilab (dropper)</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button className="btn btn-outline" onClick={() => setShowInjectionModal(false)}>Bekor qilish</button>
+          <button className="btn btn-primary" onClick={handleExecuteInjection}>Bajarildi</button>
+        </div>
+      </Modal>
+
       <ConfirmDialog
         isOpen={showDischargeConfirm}
         title="Bemorni chiqarish"
@@ -628,6 +887,9 @@ function NurseTasks() {
         if (m.date === today && m.status === 'given') {
           list.push({ type: 'medication', patient: `${p.firstName} ${p.lastName}`, task: `${m.name} ${m.dose}`, time: m.time, status: 'done' });
         }
+        if (m.date === today && m.status === 'skipped') {
+          list.push({ type: 'medication', patient: `${p.firstName} ${p.lastName}`, task: `${m.name} ${m.dose} (${m.skipReason || "o'tkazildi"})`, time: m.time, status: 'skipped' });
+        }
       });
       (p.treatments || []).forEach(t => {
         if (t.date === today) {
@@ -638,7 +900,7 @@ function NurseTasks() {
     return list.sort((a, b) => a.time.localeCompare(b.time));
   }, [patients]);
 
-  const doneCount = tasks.filter(t => t.status === 'done').length;
+  const doneCount = tasks.filter(t => t.status === 'done' || t.status === 'skipped').length;
   const pendingCount = tasks.filter(t => t.status === 'pending').length;
 
   return (
@@ -652,12 +914,23 @@ function NurseTasks() {
 
       <div className="space-y-2">
         {tasks.map((task, i) => (
-          <div key={i} className={`card p-3 border-l-4 ${task.status === 'done' ? 'border-l-green-500 bg-green-50/50' : 'border-l-yellow-400'}`}>
+          <div 
+            key={i} 
+            className={`card p-3 border-l-4 ${
+              task.status === 'done' 
+                ? 'border-l-green-500 bg-green-50/50' 
+                : task.status === 'skipped'
+                  ? 'border-l-red-500 bg-red-50/30'
+                  : 'border-l-yellow-400'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-sm">{task.status === 'done' ? '✅' : '⏳'}</span>
+                <span className="text-sm">
+                  {task.status === 'done' ? '✅' : task.status === 'skipped' ? '❌' : '⏳'}
+                </span>
                 <div>
-                  <p className={`text-sm font-medium ${task.status === 'done' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{task.task}</p>
+                  <p className={`text-sm font-medium ${task.status === 'done' || task.status === 'skipped' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{task.task}</p>
                   <p className="text-xs text-gray-500">{task.patient} • {task.time}</p>
                 </div>
               </div>

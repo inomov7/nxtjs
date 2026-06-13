@@ -1,0 +1,129 @@
+====================================================================
+            HAYOT KLINIKASI CRM — FOYDALANUVCHI QO'LLANMASI
+====================================================================
+
+Ushbu qo'llanma Hayot Klinikasi CRM tizimidagi SMS Gateway (SMS integratsiyasi),
+Licheniya (Muolajalar) rejalashtirish va Bo'lib to'lash (Installment) tizimidan
+foydalanish bo'yicha batafsil yo'riqnomadir.
+
+--------------------------------------------------------------------
+1. DASTURNI ISHGA TUSHIRISH VA SOZLASh
+--------------------------------------------------------------------
+* Tizim Next.js va SQLite ma'lumotlar bazasida ishlaydi.
+* Mahalliy kompyuterda ishga tushirish uchun quyidagi buyruq ishlatiladi:
+  npm run dev
+* Dastur ishga tushgandan so'ng brauzerda http://localhost:3000 manziliga kiriladi.
+
+--------------------------------------------------------------------
+2. ANDROID SMS SERVER BILAN ULANISH (SMS Gateway)
+--------------------------------------------------------------------
+Klinika CRM tizimi orqali SMS yuborish uchun maxsus Android ilovasi (SMS Server) 
+mobil telefonga o'rnatilishi lozim. Android ilova orqa fonda ishlab, CRM 
+tizimidan SMS-larni tortib oladi va SIM-kartalar yordamida mijozlarga jo'natadi.
+
+CRM tizimi 2 ta alohida API manzillarini taqdim etadi:
+
+A. Marketing SMS API (Reklamalar uchun):
+   * Manzil: http://[CRM_SERVER_IP]:3000/api/sms/marketing
+   * Vazifasi: Admin tomonidan yuklangan reklamalar, umumiy e'lonlar va
+     ommaviy SMS kampaniyalarini yuborish uchun ishlatiladi.
+
+B. Majburiy (Muolaja) SMS API (Eslatmalar uchun):
+   * Manzil: http://[CRM_SERVER_IP]:3000/api/sms/scheduled
+   * Vazifasi: Muolajalarga yozilgan bemorlarga o'z vaqtida (masalan, 30 daqiqa oldin)
+     boradigan avtomatik eslatmalarni jo'natish uchun ishlatiladi.
+
+Ushbu API manzillarini nusxalash uchun Admin bo'limidagi:
+1. "SMS Boshqaruvi" tabiga o'tiladi
+2. Yoki "Sozlamalar" tabiga o'tiladi
+U erda copyable (nusxa olinadigan) havolalar keltirilgan. Android ilovadagi 
+API ulanish sozlamasiga (API Polling URL) tegishli manzil yozib qo'yiladi.
+
+--------------------------------------------------------------------
+3. ADMIN: SMS KAMPANIYALARI VA SOZLAMALARI
+--------------------------------------------------------------------
+Admin panelidagi "SMS Boshqaruvi" bo'limida quyidagi imkoniyatlar bor:
+
+A. Ommaviy Baza Yuklash:
+   * .txt, .csv va Excel (.xlsx, .xls) formatidagi telefon raqamlar bazasini 
+     yuklash imkoniyati. Tizim avtomatik tarzda barcha raqamlarni ajratib oladi.
+B. Dinamik SMS Shabloni:
+   * Matn ichida "$nomer" kalit so'zidan foydalanib xabar yozish mumkin. 
+     Masalan: "Salom, bu $nomer band qilinganmi?"
+     SMS yuborilayotgan paytda $nomer o'rniga haqiqiy telefon raqami yozilib ketadi.
+C. SIM-karta Slotini tanlash:
+   * Ikki SIM-kartali telefonlar uchun xabarni SIM-1 (Slot 0) yoki SIM-2 (Slot 1) 
+     orqali yuborishni tanlash.
+D. Kechiktirilgan SMS:
+   * SMS-larni darhol yubormasdan, kelajakdagi aniq bir sana va vaqtga 
+     rejalashtirish imkoniyati.
+E. Muolaja Eslatmasi Shablonini Sozlash:
+   * Admin panelda muolaja eslatma shablonini o'zgartirish mumkin. Quyidagi 
+     o'zgaruvchilardan foydalaniladi:
+     - $bemor : Bemorning ismi va familiyasi
+     - $sana : Muolaja sanasi (kun.oy.yil formatida)
+     - $vaqt : Seans boshlanish vaqti (soat:daqiqa)
+     - $muolaja : Muolaja nomi (masalan: Fizioterapiya)
+     - $tel : Klinika telefon raqami
+     Masalan: "Hurmatli $bemor, sizda $sana kuni soat $vaqt da $muolaja seansi bor."
+F. SMS Narxi:
+   * Global sozlamalarda 1 dona SMS narxi so'mda kiritiladi va jami yuborilgan 
+     SMS-lar qiymati hisoblab boriladi.
+
+--------------------------------------------------------------------
+4. RECEPTShION: YANGI MIJOZ VA INLINE MUOLAJA REJALASh
+--------------------------------------------------------------------
+Resepshon "Bemor Ro'yxatdan O'tkazish" oynasida quyidagilarni amalga oshiradi:
+
+A. "Muolaja yozish (Davolanish rejalash)" Tuggli:
+   * Ushbu tuggl faollashtirilsa, "Muolaja rejalash" formasi formaning eng yuqori 
+     qismida ochiladi.
+   * "Muolaja yozish" yoqilganda, keraksiz bo'lgan "Tashrif ma'lumotlari" card-i 
+     (Kelish sababi, shifokor, navbat vaqti, sug'urta) sahifadan butunlay yashirinadi.
+   * Ushbu maydonlar bo'yicha majburiy tekshiruvlar chetlab o'tiladi. 
+     Bemorning kelish sababi avtomatik tarzda "Muolaja: [Muolaja nomi]" qilib yoziladi.
+
+B. Muolaja Sozlamalari:
+   * Muolaja turi, boshlanish sanasi, kunlik vaqti (masalan, 17:00), seanslar soni 
+     (davomiyligi kunlarda), davriyligi (har kuni yoki kun ora), narxi va 
+     SMS eslatma yuborilishi kerak bo'lgan vaqt (offset, daqiqada - masalan, 30 daqiqa oldin).
+   * Ushbu muolaja saqlanganda, tizim avtomatik ravishda belgilangan kunlarga 
+     SMS eslatmalar navbatini shakllantiradi (masalan, seans 17:00 da bo'lsa, 16:30 da SMS boradi).
+
+--------------------------------------------------------------------
+5. RECEPTShION: MUOLAJALAR UCHUN BO'LIB TO'LASh (INSTALLMENTS)
+--------------------------------------------------------------------
+Mijozlar muolaja narxini boshida to'liq emas, balki har kelganda bo'lib-bo'lib 
+to'lashlari mumkin. Buni boshqarish uchun resepshonda alohida to'lov bo'limi bor:
+
+A. Bo'lib To'lash Sahifasi:
+   * "To'lov" tabiga o'tiladi.
+   * "Muolaja to'lovlari (Bo'lib to'lash)" subtabi tanlanadi.
+   * Faol muolajalarga ega bo'lgan bemor ro'yxatdan tanlanadi.
+   * Bemorning faol muolaja rejasi tanlanadi.
+
+B. Holat va Qarz Hisoboti:
+   * Tizim tanlangan muolajaning umumiy narxini, shu kunga qadar to'langan summani 
+     va qolgan qarz miqdorini aniq ko'rsatib turadi.
+   * Barcha amalga oshirilgan oraliq to'lovlar tarixi sana, vaqt va to'lov usuli 
+     (naqd/karta) bilan ro'yxat bo'lib chiqadi.
+
+C. Yangi To'lov Yozish:
+   * Qabul qilingan summa kiritiladi va "To'lovni tasdiqlash" bosiladi.
+   * Ushbu to'lov global moliya jurnallariga va bemorning shaxsiy tarixiga 
+     ("shu kuni shu muolaja uchun shuncha pul to'ladi" ko'rinishida) yoziladi.
+   * Muolajaning jami to'langan summasi oshiriladi, qoldiq qarz avtomatik 
+     qayta hisoblanadi.
+
+--------------------------------------------------------------------
+6. FOYDALI MASLAHATLAR VA INTEGRATSIYA
+--------------------------------------------------------------------
+* SMS Navbatidagi xatolik bergan (failed) xabarlarni Admin SMS panelidan 
+  "Xatoliklarni qaytarish" tugmasini bosib qayta "pending" holatiga o'tkazish mumkin.
+* Bemorning muolaja vaqti o'zgarganda (muolaja tahrirlanganda), eski vaqtga 
+  rejalashtirilgan eslatma SMS-lari o'chirilib, yangi muddatga moslab qaytadan yaratiladi.
+* Muolaja bekor qilinganda esa unga bog'liq barcha kutilayotgan SMS-lar o'chib ketadi.
+
+====================================================================
+               SOG'LOM VA BAXTLI HAYOT SARI — CRM TIZIMI
+====================================================================

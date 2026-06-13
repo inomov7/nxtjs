@@ -5,6 +5,10 @@ export const ROLES = {
   doctor: { key: 'doctor', label: 'Shifokor', color: '#16A34A', password: 'doctor123' },
   nurse: { key: 'nurse', label: 'Hamshira', color: '#9333EA', password: 'nurse123' },
   reception: { key: 'reception', label: 'Resepshion', color: '#F59E0B', password: 'reception123' },
+  cleaner: { key: 'cleaner', label: 'Farrosh', color: '#EC4899', noLogin: true },
+  cook: { key: 'cook', label: 'Oshpaz', color: '#84CC16', noLogin: true },
+  security: { key: 'security', label: 'Qorovul', color: '#6B7280', noLogin: true },
+  other: { key: 'other', label: 'Yordamchi xodim', color: '#06B6D4', noLogin: true },
 };
 
 export const ROOM_TYPES = ['Oddiy', 'VIP', 'Ikki kishilik', 'Reanimatsiya (ICU)', 'Operatsiya', 'Jarrohlik', "Ko'rish xonasi"];
@@ -28,8 +32,9 @@ export const PATIENT_STATUSES = ['ambulatoriya', 'stasionar', 'tuzalgan', 'navba
 
 export function generateId(prefix = 'KL') {
   const year = new Date().getFullYear();
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}-${year}-${num}`;
+  const ts = Date.now().toString().slice(-4);
+  const rnd = Math.floor(100 + Math.random() * 900);
+  return `${prefix}-${year}-${ts}${rnd}`;
 }
 
 export function getDefaultStaff() {
