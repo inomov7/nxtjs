@@ -1,8 +1,8 @@
 ====================================================================
-            HAYOT KLINIKASI CRM — FOYDALANUVCHI QO'LLANMASI
+            KLINIKA CRM — FOYDALANUVCHI QO'LLANMASI
 ====================================================================
 
-Ushbu qo'llanma Hayot Klinikasi CRM tizimidagi SMS Gateway (SMS integratsiyasi),
+Ushbu qo'llanma Klinika CRM tizimidagi SMS Gateway (SMS integratsiyasi),
 Licheniya (Muolajalar) rejalashtirish va Bo'lib to'lash (Installment) tizimidan
 foydalanish bo'yicha batafsil yo'riqnomadir.
 

@@ -1553,8 +1553,23 @@ function KpiManagement() {
   }, [payrollList]);
 
   const handlePay = (member) => {
-    updateStaff(member.id, { salaryStatus: 'paid' });
     const today = new Date().toISOString().split('T')[0];
+    const newPayment = {
+      id: `PAY-${Date.now()}`,
+      type: 'salary',
+      amount: Number(member.totalSalary),
+      note: "Maosh to'lovi",
+      date: today,
+      by: 'Admin'
+    };
+    const paymentHistory = [...(member.paymentHistory || []), newPayment];
+    
+    updateStaff(member.id, { 
+      salaryStatus: 'paid', 
+      lastSalaryPaidDate: today, 
+      paymentHistory 
+    });
+    
     const updatedFinances = finances.map(f => f.date === today ? { ...f, expense: f.expense + member.totalSalary } : f);
     if (!finances.some(f => f.date === today)) {
       updatedFinances.push({ date: today, income: 0, expense: member.totalSalary, patients: 0 });
@@ -1717,15 +1732,17 @@ function KpiManagement() {
                       </td>
                       <td className="no-print">
                         <div className="flex items-center gap-2">
-                          {member.status === 'pending' ? (
-                            <button className="btn btn-success btn-sm" onClick={() => setConfirmPayout(member)}>
-                              Maosh to&apos;lash
+                          <div className="flex flex-col items-start gap-1">
+                            <button 
+                              className={`btn btn-sm ${member.lastSalaryPaidDate && member.lastSalaryPaidDate.startsWith(new Date().toISOString().slice(0, 7)) ? 'btn-outline border-green-500 text-green-600' : 'btn-success'}`}
+                              onClick={() => setConfirmPayout(member)}
+                            >
+                              {member.lastSalaryPaidDate && member.lastSalaryPaidDate.startsWith(new Date().toISOString().slice(0, 7)) ? "Qayta to'lash" : "Maosh to'lash"}
                             </button>
-                          ) : (
-                            <button className="btn btn-outline btn-sm text-gray-400 border-gray-200 cursor-not-allowed" disabled>
-                              To&apos;langan
-                            </button>
-                          )}
+                            {member.lastSalaryPaidDate && (
+                              <span className="text-[10px] text-gray-400 font-medium">Oxirgi: {formatDate(member.lastSalaryPaidDate)}</span>
+                            )}
+                          </div>
                           <button className="btn btn-icon btn-outline btn-sm" onClick={() => handleEditKpi(member)} title="KPI tahrirlash">
                             <Edit size={14} />
                           </button>
@@ -1834,11 +1851,17 @@ function KpiManagement() {
       <ConfirmDialog
         isOpen={!!confirmPayout}
         title="Maosh to'lash"
-        message={confirmPayout ? `${confirmPayout.firstName} ${confirmPayout.lastName}ga jami ${formatMoney(confirmPayout.totalSalary)} so'm maosh to'lamoqchimisiz?` : ''}
+        message={
+          confirmPayout 
+            ? `${confirmPayout.lastSalaryPaidDate && confirmPayout.lastSalaryPaidDate.startsWith(new Date().toISOString().slice(0, 7)) 
+                ? "Siz bu oy uchun oylik bergansiz. Baribir to'lamoqchimisiz?\n\n" 
+                : ""}${confirmPayout.firstName} ${confirmPayout.lastName}ga jami ${formatMoney(confirmPayout.totalSalary)} so'm maosh to'lamoqchimisiz?` 
+            : ''
+        }
         onConfirm={() => handlePay(confirmPayout)}
         onCancel={() => setConfirmPayout(null)}
-        danger={false}
-        confirmText="Ha, to'lash"
+        danger={!!(confirmPayout?.lastSalaryPaidDate && confirmPayout.lastSalaryPaidDate.startsWith(new Date().toISOString().slice(0, 7)))}
+        confirmText={confirmPayout?.lastSalaryPaidDate && confirmPayout.lastSalaryPaidDate.startsWith(new Date().toISOString().slice(0, 7)) ? "Baribir to'lash" : "Ha, to'lash"}
       />
 
       {/* KPI Edit Modal */}

@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "Hayot Klinikasi — CRM Boshqaruv Tizimi",
+  title: "Klinika CRM — Boshqaruv Tizimi",
   description: "To'liq funksional klinika CRM tizimi: bemorlar, shifokorlar, hamshiralar, resepshion va aptek boshqaruvi",
   keywords: "klinika, CRM, tibbiyot, boshqaruv, bemor, shifokor",
 };

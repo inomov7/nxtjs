@@ -20,6 +20,7 @@ import {
 const TABS = [
   { key: 'floorplan', label: 'Palatalar Xaritasi', icon: <Map size={18} /> },
   { key: 'tasks', label: 'Vazifalar', icon: <CheckSquare size={18} /> },
+  { key: 'treatments', label: 'Muolaja Kurslari', icon: <Activity size={18} /> },
   { key: 'shift', label: 'Shift Topshirish', icon: <ArrowRightLeft size={18} /> },
   { key: 'settings', label: 'Sozlamalar', icon: <Settings size={18} /> },
 ];
@@ -37,6 +38,7 @@ export default function NursePanel() {
         {activeTab === 'floorplan' && !selectedPatient && <FloorPlan onSelectPatient={setSelectedPatient} />}
         {activeTab === 'floorplan' && selectedPatient && <PatientMonitor patient={selectedPatient} onBack={() => setSelectedPatient(null)} />}
         {activeTab === 'tasks' && <NurseTasks />}
+        {activeTab === 'treatments' && <TreatmentCourses />}
         {activeTab === 'shift' && <ShiftHandover />}
         {activeTab === 'settings' && (
           <div>
@@ -167,7 +169,7 @@ function PatientMonitor({ patient, onBack }) {
     });
 
     toast('Bemor shifoxonadan chiqarildi', 'success');
-    addActivityLogEntry({ user: 'Hamshira', action: 'Bemor shifoxonadan chiqarildi', target: `${patient.firstName} ${patient.lastName}` });
+    addActivityLogEntry({ user: user ? `${user.firstName} ${user.lastName} (Hamshira)` : 'Hamshira', action: 'Bemor shifoxonadan chiqarildi', target: `${patient.firstName} ${patient.lastName}` });
     onBack();
   };
 
@@ -182,7 +184,7 @@ function PatientMonitor({ patient, onBack }) {
     const meds = [...(patient.medications || [])];
     meds[idx] = { ...meds[idx], status: 'given', nurse: user?.id, givenTime: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) };
     updatePatient(patient.id, { medications: meds });
-    addActivityLogEntry({ user: 'Hamshira', action: 'Dori berildi', target: `${patient.firstName} ${patient.lastName} - ${meds[idx].name} ${meds[idx].dose}` });
+    addActivityLogEntry({ user: user ? `${user.firstName} ${user.lastName} (Hamshira)` : 'Hamshira', action: 'Dori berildi', target: `${patient.firstName} ${patient.lastName} - ${meds[idx].name} ${meds[idx].dose}` });
     toast(`${meds[idx].name} berildi ✅`, 'success');
   };
 
@@ -217,7 +219,7 @@ function PatientMonitor({ patient, onBack }) {
       weight: parseFloat(vitalForm.weight) || null,
     };
     updatePatient(patient.id, { vitalSigns: [...(patient.vitalSigns || []), vital] });
-    addActivityLogEntry({ user: 'Hamshira', action: "Vital belgilar o'lchandi", target: `${patient.firstName} ${patient.lastName}` });
+    addActivityLogEntry({ user: user ? `${user.firstName} ${user.lastName} (Hamshira)` : 'Hamshira', action: "Vital belgilar o'lchandi", target: `${patient.firstName} ${patient.lastName}` });
     toast('Vital belgilar saqlandi', 'success');
     setShowVitalModal(false);
     setVitalForm({ temperature: '', bloodPressure: '', pulse: '', respRate: '', spo2: '', sugar: '', weight: '' });
@@ -227,7 +229,7 @@ function PatientMonitor({ patient, onBack }) {
   const handleSOS = () => {
     if (!sosReason) { toast('Sabab tanlang', 'error'); return; }
     addNotification({ type: 'sos', message: `🚨 SOS! ${patient.firstName} ${patient.lastName} — ${sosReason}`, roles: ['admin', 'doctor', 'nurse', 'reception'] });
-    addActivityLogEntry({ user: 'Hamshira', action: 'SOS signal yuborildi', target: `${patient.firstName} ${patient.lastName} - ${sosReason}` });
+    addActivityLogEntry({ user: user ? `${user.firstName} ${user.lastName} (Hamshira)` : 'Hamshira', action: 'SOS signal yuborildi', target: `${patient.firstName} ${patient.lastName} - ${sosReason}` });
     toast('🚨 SOS signal yuborildi!', 'error');
     setShowSOS(false);
     setSosReason('');
@@ -272,7 +274,7 @@ function PatientMonitor({ patient, onBack }) {
       title: 'Choy berildi',
       details: 'Bemorga issiq choy berildi'
     });
-    addActivityLogEntry({ user: 'Hamshira', action: 'Choy berildi', target: `${patient.firstName} ${patient.lastName}` });
+    addActivityLogEntry({ user: user ? `${user.firstName} ${user.lastName} (Hamshira)` : 'Hamshira', action: 'Choy berildi', target: `${patient.firstName} ${patient.lastName}` });
     toast('Bemorga choy berildi ☕', 'success');
   };
 
@@ -287,7 +289,7 @@ function PatientMonitor({ patient, onBack }) {
       details: `${injectionForm.name} ukoli qilindi. Doza: ${injectionForm.dose || "1 ta"} (${injectionForm.method})`
     });
     
-    addActivityLogEntry({ user: 'Hamshira', action: 'Ukol qilindi', target: `${patient.firstName} ${patient.lastName} - ${injectionForm.name}` });
+    addActivityLogEntry({ user: user ? `${user.firstName} ${user.lastName} (Hamshira)` : 'Hamshira', action: 'Ukol qilindi', target: `${patient.firstName} ${patient.lastName} - ${injectionForm.name}` });
 
     let updated = false;
     const meds = [...(patient.medications || [])];
@@ -996,6 +998,126 @@ function ShiftHandover() {
       <button className="btn btn-success btn-lg" onClick={() => toast('Shift topshirildi! ✅', 'success')}>
         <Send size={18} /> Shiftni topshirish
       </button>
+    </div>
+  );
+}
+
+// ===== OUTPATIENT TREATMENT COURSES =====
+function TreatmentCourses() {
+  const { treatments, updateTreatment, finances, setFinances, addActivityLogEntry, user } = useCrm();
+  const toast = useToast();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Find all active treatments that have a session scheduled for today
+  const todaySessions = useMemo(() => {
+    const list = [];
+    treatments.forEach(t => {
+      if (t.status !== 'active') return;
+      const sessionToday = (t.sessions || []).find(s => s.date === today);
+      if (sessionToday) {
+        list.push({
+          treatmentId: t.id,
+          patientName: t.patientName,
+          patientPhone: t.patientPhone,
+          treatmentName: t.treatmentName,
+          time: t.time,
+          price: t.price,
+          durationDays: t.durationDays,
+          session: sessionToday,
+          fullTreatment: t
+        });
+      }
+    });
+    return list.sort((a, b) => a.time.localeCompare(b.time));
+  }, [treatments, today]);
+
+  const handleSessionStatus = (item, newStatus) => {
+    const nurseName = user ? `${user.firstName} ${user.lastName}` : 'Hamshira';
+    const updatedSessions = item.fullTreatment.sessions.map(s => {
+      if (s.date === today) {
+        return { ...s, status: newStatus, nurseId: user?.id, nurseName: nurseName };
+      }
+      return s;
+    });
+
+    updateTreatment(item.treatmentId, { sessions: updatedSessions });
+
+    if (newStatus === 'completed') {
+      const sessionAmount = item.session.amount || 0;
+      // Update finances: increase income
+      const updatedFinances = finances.map(f => f.date === today ? { ...f, income: f.income + sessionAmount } : f);
+      if (!finances.some(f => f.date === today)) {
+        updatedFinances.push({ date: today, income: sessionAmount, expense: 0, patients: 0 });
+      }
+      setFinances(updatedFinances);
+
+      addActivityLogEntry({
+        user: `${nurseName} (Hamshira)`,
+        action: 'Muolaja seansi bajarildi (To\'lov tushdi)',
+        target: `${item.patientName} - ${item.treatmentName} (${formatMoney(sessionAmount)} so'm)`
+      });
+      toast(`${item.patientName} - muolajaga keldi. ${formatMoney(sessionAmount)} so'm tushumga qo'shildi!`, 'success');
+    } else {
+      addActivityLogEntry({
+        user: `${nurseName} (Hamshira)`,
+        action: 'Muolaja seansiga bemor kelmadi',
+        target: `${item.patientName} - ${item.treatmentName}`
+      });
+      toast(`${item.patientName} - muolajaga kelmadi. Narx hisoblanmadi.`, 'warning');
+    }
+  };
+
+  const completedCount = todaySessions.filter(item => item.session.status === 'completed').length;
+  const pendingCount = todaySessions.filter(item => item.session.status === 'pending').length;
+  const absentCount = todaySessions.filter(item => item.session.status === 'no-show').length;
+
+  return (
+    <div className="animate-fadeIn">
+      <Header title="Bugungi Muolaja Kurslari (Licheniya)" subtitle={`Jami bugun: ${todaySessions.length} ta bemor`} role="nurse" />
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <StatCard icon={<CheckCircle size={24} />} title="Keldi (Bajarildi)" value={completedCount} colorClass="stat-green" />
+        <StatCard icon={<Clock size={24} />} title="Kutilmoqda" value={pendingCount} colorClass="stat-yellow" />
+        <StatCard icon={<XCircle size={24} />} title="Kelmidi" value={absentCount} colorClass="stat-red" />
+      </div>
+
+      <div className="space-y-3">
+        {todaySessions.map((item, idx) => (
+          <div key={idx} className="card p-4 animate-fadeIn border-l-4 border-l-blue-500">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h4 className="font-bold text-gray-900 text-base">{item.patientName}</h4>
+                <p className="text-xs text-gray-500 mt-0.5">📞 {item.patientPhone} • 🕐 {item.time}</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="badge badge-purple">{item.treatmentName}</span>
+                  <span className="text-xs text-gray-500 font-semibold">Seans: {item.session.index} / {item.durationDays}</span>
+                  <span className="text-xs text-green-600 font-bold">Narxi: {formatMoney(item.session.amount)} so&apos;m</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                {item.session.status === 'pending' ? (
+                  <>
+                    <button className="btn btn-success btn-sm font-semibold" onClick={() => handleSessionStatus(item, 'completed')}>
+                      ✅ Keldi
+                    </button>
+                    <button className="btn btn-danger btn-sm font-semibold" onClick={() => handleSessionStatus(item, 'no-show')}>
+                      ❌ Kelmidi
+                    </button>
+                  </>
+                ) : (
+                  <span className={`badge ${item.session.status === 'completed' ? 'badge-success' : 'badge-danger'}`}>
+                    {item.session.status === 'completed' ? '🟢 Keldi (Bajarildi)' : '🔴 Kelmidi'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {todaySessions.length === 0 && (
+          <EmptyState icon={<Activity size={48} />} title="Bugun hech qanday muolaja kursi rejalashtirilmagan" />
+        )}
+      </div>
     </div>
   );
 }

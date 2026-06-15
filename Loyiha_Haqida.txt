@@ -1,5 +1,5 @@
 ====================================================================
-               HAYOT KLINIKASI CRM TIZIMI — HUJJATLAR
+               KLINIKA CRM TIZIMI — HUJJATLAR
 ====================================================================
 
 Ushbu loyiha klinikalar faoliyatini avtomatlashtirish, xodimlar ishini

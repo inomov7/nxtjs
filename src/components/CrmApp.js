@@ -81,7 +81,7 @@ export default function CrmApp() {
           </div>
 
           <h2 className="font-semibold text-white/50 text-[13px] tracking-widest uppercase mt-6 opacity-80" style={{ fontFamily: "'Outfit', sans-serif" }}>
-            HAYOT KLINIKASI
+            KLINIKA CRM
           </h2>
         </div>
       </div>

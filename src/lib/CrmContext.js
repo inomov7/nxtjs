@@ -562,11 +562,32 @@ export function CrmProvider({ children }) {
     const patient = patientObject || patients.find(p => p.id === treatmentData.patientId);
     if (!patient) return null;
     
+    // Generate sessions list
+    const duration = Number(treatmentData.durationDays);
+    const pricePerSession = Math.round(Number(treatmentData.price) / duration);
+    const sessions = [];
+    let currentDate = new Date(treatmentData.startDate);
+    for (let i = 0; i < duration; i++) {
+      const sessionDate = new Date(currentDate).toISOString().split('T')[0];
+      sessions.push({
+        index: i + 1,
+        date: sessionDate,
+        status: 'pending', // 'pending', 'completed', 'no-show'
+        amount: pricePerSession
+      });
+      if (treatmentData.frequency === 'Kunda') {
+        currentDate.setDate(currentDate.getDate() + 1);
+      } else {
+        currentDate.setDate(currentDate.getDate() + 2);
+      }
+    }
+    
     const newTreatment = {
       ...treatmentData,
       id: treatmentId,
       createdAt: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
+      sessions
     };
     
     const newSmsList = generateSmsForTreatment(patient, newTreatment, treatmentId);

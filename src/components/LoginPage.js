@@ -88,7 +88,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-white/10 text-white text-3xl mb-4 border border-white/20 shadow-inner backdrop-blur-md">
             🏥
           </div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Hayot Klinikasi</h1>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Klinika CRM</h1>
           <p className="text-white/40 text-xs font-light mt-1">CRM Boshqaruv Tizimi</p>
         </div>
 
@@ -144,7 +144,7 @@ export default function LoginPage() {
 
       {/* Footer Lock Screen Text */}
       <div className="text-center text-white/25 text-[11px] font-light tracking-wide mt-4 select-none">
-        © 2026 Hayot Klinikasi • Apple Style CRM
+        © 2026 Klinika CRM • Apple Style CRM
       </div>
     </div>
   );

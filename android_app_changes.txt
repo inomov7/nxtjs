@@ -3,7 +3,7 @@
 ====================================================================
 
 Ushbu yo'riqnoma sizning Android (Kotlin / Jetpack Compose / Ktor) 
-ilovangizni Hayot Klinikasi CRM tizimining yangi yaratilgan SMS API-ga
+ilovangizni Klinika CRM tizimining yangi yaratilgan SMS API-ga
 moslashtirish uchun yozildi.
 
 --------------------------------------------------------------------

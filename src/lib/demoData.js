@@ -514,11 +514,11 @@ export function getDefaultActivityLog() {
 
 export function getDefaultClinicSettings() {
   return {
-    name: 'Hayot Klinikasi',
+    name: 'Klinika CRM',
     logo: null,
     address: "Toshkent shahri, Chilonzor tumani, Bunyodkor ko'chasi, 15-uy",
     phone: '+998 71 200 00 01',
-    email: 'info@hayotklinika.uz',
+    email: 'info@klinikacrm.uz',
     workHours: {
       weekdays: { start: '08:00', end: '20:00' },
       saturday: { start: '09:00', end: '15:00' },

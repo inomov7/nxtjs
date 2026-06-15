@@ -1,9 +1,33 @@
 import { NextResponse } from 'next/server';
 import { readDb, updateEntity } from '@/lib/db';
 
-// GET: SMS Server pulls pending messages
+// GET: SMS Server pulls pending messages or updates status
 export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const status = searchParams.get('status');
+    const errorParam = searchParams.get('error');
+
+    if (id && status) {
+      let normalizedStatus = 'sent';
+      if (status === 'failed' || status === 'error' || errorParam) {
+        normalizedStatus = 'failed';
+      }
+
+      const updateData = {
+        status: normalizedStatus,
+        sentAt: new Date().toISOString()
+      };
+      if (errorParam) {
+        updateData.error = errorParam;
+      }
+      
+      const { updateEntity } = await import('@/lib/db');
+      await updateEntity('smsQueue', id, updateData);
+      return NextResponse.json({ success: true, message: `Status updated to ${normalizedStatus}` });
+    }
+
     try {
       const { updateEntity } = await import('@/lib/db');
       await updateEntity('clinicSettings', null, { lastSmsPollTime: new Date().toISOString() });
@@ -24,7 +48,7 @@ export async function GET(request) {
         id: sms.id,
         phone: sms.phone,
         message: sms.message,
-        sim: sms.sim !== undefined ? sms.sim : 0
+        status: "wait"
       }));
 
     return NextResponse.json(pendingSms);

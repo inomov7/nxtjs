@@ -297,7 +297,7 @@ export function Sidebar({ role, tabs, activeTab, onTabChange }) {
               </svg>
             </div>
             <div className="sidebar-text">
-              <h1 className="text-gray-900 font-bold text-sm leading-tight">{clinicSettings.name || 'Hayot Klinikasi'}</h1>
+              <h1 className="text-gray-900 font-bold text-sm leading-tight">{clinicSettings.name || 'Klinika CRM'}</h1>
               <p className="text-gray-500 text-xs">{roleConfig.label}</p>
             </div>
           </div>

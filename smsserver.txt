@@ -1,7 +1,7 @@
 Ushbu loyiha — SMS Server Android ilovasi bo'lib, u har qanday Android qurilmani (telefonni) shaxsiy yoki biznes ehtiyojlari (masalan, sizda ochiq turgan 
 
 CrmApp.js
- "Hayot Klinikasi" CRM tizimi kabi ilovalar) uchun **SMS Gateway (SMS shlyuzi)**ga aylantirib beradi.
+  "Klinika CRM" tizimi kabi ilovalar) uchun **SMS Gateway (SMS shlyuzi)**ga aylantirib beradi.
 
 Ilova yordamida tashqi tizimlar (veb-saytlar, CRM, turli skriptlar va API-lar) mobil telefondagi SIM-kartalardan foydalangan holda mijozlarga avtomatik ravishda SMS xabarlar jo'natishi mumkin.
 
@@ -61,7 +61,7 @@ Dastur interfeysidagi
 FlowDiagram.kt
  komponentiga ko'ra oqim quyidagicha ishlaydi:
 
-Sizning Serveringiz/CRM (Hayot Klinikasi) $\rightarrow$ HTTP request yordamida SMS ma'lumotlarini jo'natadi.
+Sizning Serveringiz/CRM (Klinika CRM) $\rightarrow$ HTTP request yordamida SMS ma'lumotlarini jo'natadi.
 Ushbu Android ilova $\rightarrow$ So'rovni qabul qilib navbatga qo'yadi va mahalliy bazaga yozadi.
 SMS Jo'natish $\rightarrow$ Belgilangan SIM-karta orqali operator tarmog'idan SMS yuboriladi.
 Callback $\rightarrow$ SMS holati (yuborildi/xatolik) qayta ishlanib, sizning serveringizga xabar qilinadi.

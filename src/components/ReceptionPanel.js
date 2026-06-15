@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useCrm } from '@/lib/CrmContext';
 import { ROLES, BLOOD_GROUPS, ROOM_STATUSES, generateId } from '@/lib/demoData';
 import {
+  Sidebar, Header, StatCard, Modal, TabNav, useToast,
   formatMoney, formatDate, getAge, EmptyState, ConfirmDialog, ProfileSettings,
   PatientHistorySection, normalizeUzPhone
 } from './SharedComponents';
@@ -154,7 +155,7 @@ export function printThermalTicket(patient, doctor, payment) {
         </style>
       </head>
       <body>
-        <div class="header">HAYOT KLINIKASI</div>
+        <div class="header">KLINIKA CRM</div>
         <div>Navbat Chiptasi</div>
         <div class="divider"></div>
         
@@ -834,7 +835,7 @@ function PatientRegistration() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
                     <div>
                       <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">Kelish turi</label>
                       <div className="flex gap-1 bg-gray-100 dark:bg-white/5 p-1 rounded-xl w-full">
@@ -852,20 +853,6 @@ function PatientRegistration() {
                             {t}
                           </button>
                         ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">Navbat vaqti</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                          <Clock size={16} />
-                        </span>
-                        <input 
-                          className="input pl-9 text-xs" 
-                          type="time" 
-                          value={form.queueTime} 
-                          onChange={e => setForm({ ...form, queueTime: e.target.value })} 
-                        />
                       </div>
                     </div>
                   </div>
@@ -1047,7 +1034,7 @@ function PatientRegistration() {
         >
           <div className="flex flex-col items-center p-4">
             <div className="w-[300px] bg-white text-black p-6 rounded-2xl shadow-lg border border-gray-200 font-mono text-center select-none mb-6">
-              <h3 className="font-bold text-lg tracking-wider uppercase mb-1" style={{ fontFamily: "'Outfit', sans-serif" }}>HAYOT KLINIKASI</h3>
+              <h3 className="font-bold text-lg tracking-wider uppercase mb-1" style={{ fontFamily: "'Outfit', sans-serif" }}>KLINIKA CRM</h3>
               <p className="text-xs text-gray-500">Navbat Chiptasi</p>
               <div className="border-t border-dashed border-gray-400 my-3"></div>
               
@@ -1859,10 +1846,13 @@ function ReceptionReport() {
 
 // ===== TREATMENT PLANNING =====
 function TreatmentPlanning() {
-  const { patients, services, treatments, addTreatment, updateTreatment, deleteTreatment, smsQueue } = useCrm();
+  const { patients, services, treatments, addTreatment, updateTreatment, deleteTreatment, smsQueue, addPatient } = useCrm();
   const toast = useToast();
   
   const [selectedPatient, setSelectedPatient] = useState("");
+  const [newPatientFirstName, setNewPatientFirstName] = useState("");
+  const [newPatientLastName, setNewPatientLastName] = useState("");
+  const [newPatientPhone, setNewPatientPhone] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [customServiceText, setCustomServiceText] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1894,7 +1884,6 @@ function TreatmentPlanning() {
     e.preventDefault();
     if (!selectedPatient) { toast("Bemor tanlanishi shart!", "error"); return; }
     
-    const patient = patients.find(p => p.id === selectedPatient);
     let treatmentName = "";
     if (selectedService === 'custom') {
       treatmentName = customServiceText;
@@ -1905,6 +1894,41 @@ function TreatmentPlanning() {
     if (!treatmentName) { toast("Muolaja nomi tanlanishi yoki yozilishi shart!", "error"); return; }
     if (!price || Number(price) <= 0) { toast("Muolaja narxi kiritilishi shart!", "error"); return; }
 
+    let patient = null;
+    let patientId = selectedPatient;
+
+    if (selectedPatient === 'new') {
+      if (!newPatientFirstName || !newPatientLastName || !newPatientPhone) {
+        toast("Yangi bemor ma'lumotlarini to'liq kiriting!", "error");
+        return;
+      }
+      const normalizedPhone = normalizeUzPhone(newPatientPhone);
+      if (!normalizedPhone) {
+        toast("Telefon raqami noto'g'ri kiritildi!", 'error');
+        return;
+      }
+      
+      const newPatientObj = addPatient({
+        firstName: newPatientFirstName,
+        lastName: newPatientLastName,
+        phone: normalizedPhone,
+        visitReason: `Muolaja: ${treatmentName}`,
+        status: 'ambulatoriya',
+        gender: 'Erkak',
+        birthDate: '',
+        nationality: "O'zbek",
+        address: { region: 'Toshkent', district: '', street: '' },
+        bloodGroup: '',
+        allergies: [],
+        chronicDiseases: [],
+      });
+      patient = newPatientObj;
+      patientId = newPatientObj.id;
+    } else {
+      patient = patients.find(p => p.id === selectedPatient);
+      if (!patient) { toast("Bemor tanlanishi shart!", "error"); return; }
+    }
+
     // Check conflicts (double-booking)
     const newDates = [];
     let curDate = new Date(startDate);
@@ -1913,7 +1937,7 @@ function TreatmentPlanning() {
       curDate.setDate(curDate.getDate() + (frequency === 'Kunda' ? 1 : 2));
     }
 
-    const patientTreatments = treatments.filter(t => t.patientId === selectedPatient && t.status === 'active');
+    const patientTreatments = treatments.filter(t => t.patientId === patientId && t.status === 'active');
     let conflictFound = null;
 
     for (const t of patientTreatments) {
@@ -1941,7 +1965,7 @@ function TreatmentPlanning() {
     }
 
     addTreatment({
-      patientId: selectedPatient,
+      patientId: patientId,
       patientName: `${patient.firstName} ${patient.lastName}`,
       patientPhone: patient.phone,
       treatmentName,
@@ -1955,6 +1979,9 @@ function TreatmentPlanning() {
 
     toast("Yangi muolaja rejasi muvaffaqiyatli yaratildi va SMSlar rejalashtiriladi!", "success");
     setSelectedPatient("");
+    setNewPatientFirstName("");
+    setNewPatientLastName("");
+    setNewPatientPhone("");
     setSelectedService("");
     setCustomServiceText("");
     setPrice("");
@@ -2078,7 +2105,7 @@ function TreatmentPlanning() {
         </head>
         <body>
           <div class="header">
-            <div class="title">HAYOT KLINIKASI</div>
+            <div class="title">KLINIKA CRM</div>
             <div class="subtitle">Muolaja va Davolanish Rejasi</div>
           </div>
           <div class="divider"></div>
@@ -2137,8 +2164,27 @@ function TreatmentPlanning() {
                 <select className="input select py-2" value={selectedPatient} onChange={e => setSelectedPatient(e.target.value)} required>
                   <option value="">Bemor tanlang...</option>
                   {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} ({p.id})</option>)}
+                  <option value="new">-- Yangi bemor qo'shish --</option>
                 </select>
               </div>
+
+              {selectedPatient === 'new' && (
+                <div className="space-y-3 p-3 bg-gray-50 dark:bg-white/5 rounded-xl border border-black/5 animate-fadeIn">
+                  <p className="text-xs font-bold text-gray-700 dark:text-gray-300">Yangi bemor ma&apos;lumotlari:</p>
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Ism *</label>
+                    <input className="input py-1.5 text-xs" value={newPatientFirstName} onChange={e => setNewPatientFirstName(e.target.value)} placeholder="Aziz" required={selectedPatient === 'new'} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Familiya *</label>
+                    <input className="input py-1.5 text-xs" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)} placeholder="Aliyev" required={selectedPatient === 'new'} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Telefon raqam *</label>
+                    <input className="input py-1.5 text-xs" value={newPatientPhone} onChange={e => setNewPatientPhone(e.target.value)} placeholder="+998 90 123 45 67" required={selectedPatient === 'new'} />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">Muolaja turi *</label>
