@@ -1323,10 +1323,10 @@ function RoomSelection() {
   const { 
     rooms, updateRoom, patients, updatePatient, addPatientHistoryEvent, 
     dischargePatient, addPayment, addExpense, staff, services, addPatient,
-    payments, expenses 
+    payments, expenses, user 
   } = useCrm();
   const toast = useToast();
-  const [selectedRoom, setSelectedRoom] = useState(null);
+  const [detailRoom, setDetailRoom] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState('');
   const [dischargeModal, setDischargeModal] = useState(null); // { patient, room }
   const [dischargePayMethod, setDischargePayMethod] = useState('Naqd');
@@ -1450,30 +1450,33 @@ function RoomSelection() {
   }, [expenses, payments]);
 
   const handleAssign = () => {
-    if (!selectedRoom || !selectedPatient) { toast('Xona va bemor tanlang', 'error'); return; }
+    if (!detailRoom || !selectedPatient) { toast('Xona va bemor tanlang', 'error'); return; }
     
-    const roomPatientsCount = patients.filter(p => p.roomId === selectedRoom.id && p.status === 'stasionar').length;
-    if (roomPatientsCount >= selectedRoom.capacity) {
+    const roomPatientsCount = patients.filter(p => p.roomId === detailRoom.id && p.status === 'stasionar').length;
+    if (roomPatientsCount >= detailRoom.capacity) {
       toast("Xonada bo'sh joy qolmadi!", 'error');
       return;
     }
 
+    const assignerName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Resepshion' : 'Resepshion';
     updatePatient(selectedPatient, { 
-      roomId: selectedRoom.id, 
+      roomId: detailRoom.id, 
       status: 'stasionar',
-      admissionDateTime: new Date().toISOString()
+      admissionDateTime: new Date().toISOString(),
+      roomAssignedBy: assignerName,
+      roomAssignedAt: new Date().toISOString()
     });
     addPatientHistoryEvent(selectedPatient, {
       type: 'room',
       title: 'Palataga yotqizildi',
-      details: `#${selectedRoom.number}-palataga joylashtirildi`
+      details: `#${detailRoom.number}-palataga joylashtirildi`
     });
     
-    const isFull = (roomPatientsCount + 1) >= selectedRoom.capacity;
-    updateRoom(selectedRoom.id, { status: isFull ? 'busy' : 'free' });
+    const isFull = (roomPatientsCount + 1) >= detailRoom.capacity;
+    updateRoom(detailRoom.id, { status: isFull ? 'busy' : 'free' });
     
     toast('Bemor xonaga joylashtirildi', 'success');
-    setSelectedRoom(null);
+    setDetailRoom(null);
     setSelectedPatient('');
     setPatientSelectQuery('');
   };
@@ -1490,12 +1493,13 @@ function RoomSelection() {
       return;
     }
 
-    const roomPatientsCount = patients.filter(p => p.roomId === selectedRoom.id && p.status === 'stasionar').length;
-    if (roomPatientsCount >= selectedRoom.capacity) {
+    const roomPatientsCount = patients.filter(p => p.roomId === detailRoom.id && p.status === 'stasionar').length;
+    if (roomPatientsCount >= detailRoom.capacity) {
       toast("Xonada bo'sh joy qolmadi!", 'error');
       return;
     }
 
+    const assignerName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Resepshion' : 'Resepshion';
     const newPatient = addPatient({
       firstName: newPatientForm.firstName,
       lastName: newPatientForm.lastName,
@@ -1512,25 +1516,27 @@ function RoomSelection() {
       chronicDiseases: newPatientForm.chronicDiseases ? newPatientForm.chronicDiseases.split(',').map(c => c.trim()).filter(Boolean) : [],
       visitReason: 'Stasionar joylashtirish',
       status: 'stasionar',
-      roomId: selectedRoom.id,
+      roomId: detailRoom.id,
       admissionDateTime: new Date().toISOString(),
       admissionDate: new Date().toISOString().split('T')[0],
       queueTime: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
-      queueStatus: 'completed'
+      queueStatus: 'completed',
+      roomAssignedBy: assignerName,
+      roomAssignedAt: new Date().toISOString()
     });
 
     addPatientHistoryEvent(newPatient.id, {
       type: 'room',
       title: 'Palataga yotqizildi',
-      details: `#${selectedRoom.number}-palataga yangi ro'yxatdan o'tib joylashtirildi`
+      details: `#${detailRoom.number}-palataga yangi ro'yxatdan o'tib joylashtirildi`
     });
 
-    const isFull = (roomPatientsCount + 1) >= selectedRoom.capacity;
-    updateRoom(selectedRoom.id, { status: isFull ? 'busy' : 'free' });
+    const isFull = (roomPatientsCount + 1) >= detailRoom.capacity;
+    updateRoom(detailRoom.id, { status: isFull ? 'busy' : 'free' });
 
     toast(`${newPatientForm.firstName} ${newPatientForm.lastName} ro'yxatdan o'tkazildi va joylashtirildi`, 'success');
     setShowAddPatientModal(false);
-    setSelectedRoom(null);
+    setDetailRoom(null);
     setSelectedPatient('');
     setPatientSelectQuery('');
   };
@@ -1773,8 +1779,8 @@ function RoomSelection() {
               key={room.id}
               tabIndex={canSelect ? 0 : -1}
               role="button"
-              className={`floor-room room-${displayStatus} ${selectedRoom?.id === room.id ? 'ring-2 ring-blue-500' : ''} ${canSelect ? 'cursor-pointer hover:scale-[1.02]' : 'opacity-75'}`}
-              onClick={() => canSelect ? setSelectedRoom(room) : null}
+              className={`floor-room room-${displayStatus} ${detailRoom?.id === room.id ? 'ring-2 ring-blue-500' : ''} cursor-pointer hover:scale-[1.02]`}
+              onClick={() => setDetailRoom(room)}
             >
               <div className="flex justify-between items-start mb-2">
                 <h4 className="font-bold text-lg">#{room.number}</h4>
@@ -1852,58 +1858,7 @@ function RoomSelection() {
         })}
       </div>
 
-      {selectedRoom && (
-        <div className="card p-5 max-w-md mx-auto animate-fadeIn">
-          <h4 className="font-bold text-gray-900 dark:text-gray-100 mb-4">Bemorni joylashtirish — #{selectedRoom.number}</h4>
-          
-          <div className="mb-4">
-            <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">Bemorlarni ismi/tel bo'yicha qidirish</label>
-            <input
-              type="text"
-              className="input mb-2 text-sm"
-              placeholder="Ism, familiya yoki tel bo'yicha qidiring..."
-              value={patientSelectQuery}
-              onChange={e => setPatientSelectQuery(e.target.value)}
-            />
-            <label className="text-xs font-semibold text-gray-500 uppercase block mb-1.5">Tizimdagi bemorlardan tanlang</label>
-            <select className="input select mb-2 text-sm" value={selectedPatient} onChange={e => setSelectedPatient(e.target.value)}>
-              <option value="">Bemor tanlang...</option>
-              {filteredAvailablePatients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} ({p.phone})</option>)}
-            </select>
-          </div>
 
-          <div className="flex items-center justify-between my-3 text-gray-400">
-            <hr className="w-1/3 border-gray-200 dark:border-gray-700" />
-            <span className="text-xs uppercase">yoki</span>
-            <hr className="w-1/3 border-gray-200 dark:border-gray-700" />
-          </div>
-
-          <button 
-            className="btn btn-outline btn-primary w-full flex items-center justify-center gap-2 mb-4" 
-            onClick={() => {
-              setNewPatientForm({
-                firstName: '',
-                lastName: '',
-                middleName: '',
-                phone: '',
-                phone2: '',
-                address: { region: 'Toshkent', district: '', street: '' },
-                bloodGroup: '',
-                allergies: '',
-                chronicDiseases: ''
-              });
-              setShowAddPatientModal(true);
-            }}
-          >
-            <UserPlus size={16} /> Yangi bemor ro'yxatga olish
-          </button>
-
-          <div className="flex gap-3 border-t border-gray-100 dark:border-gray-800 pt-3">
-            <button className="btn btn-outline flex-1" onClick={() => { setSelectedRoom(null); setSelectedPatient(''); setPatientSelectQuery(''); }}>Bekor</button>
-            <button className="btn btn-success flex-1" onClick={handleAssign} disabled={!selectedPatient}>Joylashtirish</button>
-          </div>
-        </div>
-      )}
 
       {/* Yangi bemor qo'shish modal */}
       {showAddPatientModal && (
@@ -1915,7 +1870,7 @@ function RoomSelection() {
               </div>
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg">Yangi bemor qo'shish va xonaga joylashtirish</h3>
-                <p className="text-xs text-gray-500">#{selectedRoom?.number}-xona • {selectedRoom?.type}</p>
+                <p className="text-xs text-gray-500">#{detailRoom?.number}-xona • {detailRoom?.type}</p>
               </div>
             </div>
 
@@ -2335,6 +2290,235 @@ function RoomSelection() {
               <button className="btn btn-success flex-1" onClick={handleServiceSave}>
                 <CheckCircle size={16} /> Tasdiqlash & Yuborish
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Xona batafsil ma'lumotlari sidebari (Right Drawer) */}
+      {detailRoom && (
+        <div className="drawer-overlay" onClick={() => setDetailRoom(null)}>
+          <div className="drawer-content animate-slideInRight" onClick={e => e.stopPropagation()}>
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-zinc-800 shrink-0">
+              <div>
+                <h3 className="font-bold text-lg text-gray-900 dark:text-white">#{detailRoom.number}-xona tafsilotlari</h3>
+                <p className="text-xs text-gray-500">{detailRoom.type} • {detailRoom.floor}-qavat</p>
+              </div>
+              <button onClick={() => setDetailRoom(null)} className="btn btn-icon btn-outline p-1.5">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {/* Room Stats */}
+              <div className="grid grid-cols-2 gap-3 bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800/80">
+                <div>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Narxi/kun</span>
+                  <span className="font-bold text-sm text-gray-900 dark:text-white">{formatMoney(detailRoom.pricePerDay)} so'm</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Joylar bandligi</span>
+                  <span className="font-bold text-sm text-gray-900 dark:text-white">
+                    {patients.filter(p => p.roomId === detailRoom.id && p.status === 'stasionar').length} / {detailRoom.capacity}
+                  </span>
+                </div>
+                <div className="col-span-2 border-t border-gray-100 dark:border-zinc-800/80 pt-2.5 mt-1.5">
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Jihozlar</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(detailRoom.equipment || []).length > 0 ? (
+                      (detailRoom.equipment || []).map((eq, i) => (
+                        <span key={i} className="text-[10px] bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700/80 px-2 py-0.5 rounded-lg text-gray-700 dark:text-gray-300">{eq}</span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] text-gray-450 italic">Mavjud emas</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Occupying Patients */}
+              <div>
+                <h4 className="font-bold text-xs text-gray-500 uppercase tracking-wider mb-3">Yotgan Bemorlar</h4>
+                {(() => {
+                  const roomPatients = patients.filter(p => p.roomId === detailRoom.id && p.status === 'stasionar');
+                  if (roomPatients.length === 0) {
+                    return (
+                      <div className="text-center py-6 border-2 border-dashed border-gray-100 dark:border-zinc-800 rounded-2xl bg-gray-50/20 dark:bg-white/5">
+                        <p className="text-xs text-gray-455 italic">Bu xonada hozirda bemorlar yo'q</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-4">
+                      {roomPatients.map(p => {
+                        const days = calcDaysStayed(p);
+                        const billDays = Math.max(1, days);
+                        const fin = getPatientStasionarFinance(p, detailRoom, billDays);
+                        const assignedBy = p.roomAssignedBy || (p.assignedDoctor ? (staff.find(s => s.id === p.assignedDoctor) ? `Dr. ${staff.find(s => s.id === p.assignedDoctor).lastName} ${staff.find(s => s.id === p.assignedDoctor).firstName[0]}.` : 'Shifokor') : 'Resepshion');
+                        
+                        return (
+                          <div key={p.id} className="p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-3">
+                            {/* Patient Header */}
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <h5 className="font-bold text-sm text-gray-900 dark:text-white">
+                                  👤 {p.lastName} {p.firstName}
+                                </h5>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  ID: {p.id} • 📞 {p.phone}
+                                </p>
+                              </div>
+                              <button
+                                className="btn btn-sm btn-danger shrink-0 py-1 px-2.5 text-xs flex items-center gap-1"
+                                onClick={() => openDischargeModal(p, detailRoom)}
+                              >
+                                <DoorOpen size={12} /> Chiqar
+                              </button>
+                            </div>
+
+                            {/* Admission Details */}
+                            <div className="grid grid-cols-2 gap-2 text-[10px] bg-gray-50/50 dark:bg-white/5 p-2 rounded-xl border border-gray-100/50 dark:border-zinc-800/80">
+                              <div>
+                                <span className="text-gray-450 block">Yotqizilgan sana:</span>
+                                <span className="font-semibold text-gray-800 dark:text-gray-200">
+                                  {p.admissionDateTime ? new Date(p.admissionDateTime).toLocaleDateString('uz-UZ') : p.admissionDate}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-450 block">Yotqizgan mas'ul:</span>
+                                <span className="font-semibold text-gray-800 dark:text-gray-200 truncate block" title={assignedBy}>
+                                  {assignedBy}
+                                </span>
+                              </div>
+                              <div className="col-span-2 border-t border-gray-200 dark:border-zinc-800/80 pt-1 mt-1">
+                                <span className="text-gray-450">Joylashgan muddati: </span>
+                                <span className="font-bold text-blue-600 dark:text-blue-400">
+                                  {days === 0 ? "Bugun joylashdi" : `${days} kun bo'ldi`}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Financial breakdown */}
+                            <div className="text-[11px] space-y-1 border-t border-dashed border-gray-100 dark:border-zinc-800/80 pt-2.5">
+                              <div className="flex justify-between text-gray-500">
+                                <span>Xona ijarasi:</span>
+                                <span>{formatMoney(fin.roomCost)} so'm</span>
+                              </div>
+                              {fin.patientExpenses > 0 && (
+                                <div className="flex justify-between text-red-500 font-medium">
+                                  <span>Dori va xarajatlar:</span>
+                                  <span>+{formatMoney(fin.patientExpenses)} so'm</span>
+                                </div>
+                              )}
+                              {fin.servicesTotal > 0 && (
+                                <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium">
+                                  <span>Qo'shimcha xizmatlar:</span>
+                                  <span>+{formatMoney(fin.servicesTotal)} so'm</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between font-bold text-gray-800 dark:text-gray-200 pt-1 border-t border-gray-100 dark:border-zinc-800/80 mt-1">
+                                <span>Joriy qarz:</span>
+                                <span className="text-xs text-red-650 font-semibold">{formatMoney(fin.dueAmount)} so'm</span>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-zinc-800/80 mt-2">
+                              <button
+                                className="btn btn-sm btn-outline flex-1 text-xs py-1.5"
+                                onClick={() => openExpenseModal(p)}
+                              >
+                                <Coins size={12} /> + Xarajat
+                              </button>
+                              <button
+                                className="btn btn-sm btn-info text-white flex-1 text-xs py-1.5"
+                                onClick={() => openServiceModal(p)}
+                              >
+                                <Stethoscope size={12} /> + Xizmat
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Assign Patient section if room has vacancy */}
+              {(() => {
+                const roomPatients = patients.filter(p => p.roomId === detailRoom.id && p.status === 'stasionar');
+                const hasVacancy = roomPatients.length < detailRoom.capacity;
+                if (!hasVacancy) return null;
+                return (
+                  <div className="border-t border-dashed border-gray-200 dark:border-zinc-800 pt-5 space-y-4">
+                    <h4 className="font-bold text-xs text-gray-550 uppercase tracking-wider">Bemorni joylashtirish</h4>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Bemorlarni qidirish</label>
+                        <input
+                          type="text"
+                          className="input text-xs py-1.5"
+                          placeholder="Ism, familiya yoki tel bo'yicha qidiring..."
+                          value={patientSelectQuery}
+                          onChange={e => setPatientSelectQuery(e.target.value)}
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Bemor tanlang</label>
+                        <select 
+                          className="input select text-xs py-1.5" 
+                          value={selectedPatient} 
+                          onChange={e => setSelectedPatient(e.target.value)}
+                        >
+                          <option value="">Bemor tanlang...</option>
+                          {filteredAvailablePatients.map(p => (
+                            <option key={p.id} value={p.id}>{p.firstName} {p.lastName} ({p.phone})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button 
+                        className="btn btn-success w-full text-xs py-2 mt-2 font-semibold"
+                        onClick={handleAssign} 
+                        disabled={!selectedPatient}
+                      >
+                        Xonaga joylashtirish
+                      </button>
+
+                      <div className="flex items-center justify-between my-2 text-gray-400">
+                        <hr className="w-[42%] border-gray-200 dark:border-zinc-800" />
+                        <span className="text-[9px] uppercase font-bold tracking-widest text-gray-400">yoki</span>
+                        <hr className="w-[42%] border-gray-200 dark:border-zinc-800" />
+                      </div>
+
+                      <button 
+                        className="btn btn-outline btn-primary w-full text-xs py-2 font-semibold"
+                        onClick={() => {
+                          setNewPatientForm({
+                            firstName: '',
+                            lastName: '',
+                            middleName: '',
+                            phone: '',
+                            phone2: '',
+                            address: { region: 'Toshkent', district: '', street: '' },
+                            bloodGroup: '',
+                            allergies: '',
+                            chronicDiseases: ''
+                          });
+                          setShowAddPatientModal(true);
+                        }}
+                      >
+                        <UserPlus size={13} /> Yangi bemor ro'yxatga olish
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

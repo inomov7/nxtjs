@@ -260,6 +260,10 @@ function ExamineSection({ patient, onBack }) {
       updates.status = 'stasionar';
       updates.roomId = selectedRoom;
       
+      const docObj = staff.find(s => s.id === patient.assignedDoctor);
+      updates.roomAssignedBy = docObj ? `Dr. ${docObj.firstName} ${docObj.lastName}` : 'Shifokor';
+      updates.roomAssignedAt = new Date().toISOString();
+      
       const roomObj = rooms.find(r => r.id === selectedRoom);
       if (roomObj) {
         const roomPatientsCount = patients.filter(p => p.roomId === selectedRoom && p.status === 'stasionar').length;

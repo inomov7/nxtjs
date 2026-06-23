@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, createContext, useContext, useRef, useMemo } from 'react';
-import { X, Bell, Search, LogOut, ChevronDown, Menu, Sun, Moon, User, Lock, Settings, Calendar, Clock, Filter, Heart, Trash2 } from 'lucide-react';
+import { X, Bell, Search, LogOut, ChevronDown, Menu, Sun, Moon, User, Lock, Settings, Calendar, Clock, Filter, Heart, Trash2, Upload, Download } from 'lucide-react';
 import { useCrm } from '@/lib/CrmContext';
 import { ROLES } from '@/lib/demoData';
 import { createPortal } from 'react-dom';
@@ -813,14 +813,57 @@ export function ProfileSettings() {
   );
 }
 
+const getFileIcon = (name) => {
+  if (!name) return '📄';
+  const ext = name.split('.').pop().toLowerCase();
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return '🖼️';
+  if (ext === 'pdf') return '📕';
+  if (['doc', 'docx', 'txt', 'rtf'].includes(ext)) return '📝';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+  return '📄';
+};
+
 // ===== PATIENT HISTORY SECTION =====
 export function PatientHistorySection() {
-  const { patients, staff, payments, user, deletePatient } = useCrm();
+  const { patients, staff, payments, user, deletePatient, updatePatient } = useCrm();
   const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [confirmDeletePatient, setConfirmDeletePatient] = useState(null);
+
+  const handleHistoryFileUpload = (e) => {
+    const uploadedFiles = Array.from(e.target.files);
+    uploadedFiles.forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        toast("Fayl hajmi 5MB dan oshmasligi kerak", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const fileObj = {
+          id: 'FL-' + Date.now() + Math.random().toString(36).substring(2, 5).toUpperCase(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          content: reader.result, // base64 string
+          date: new Date().toLocaleDateString('uz-UZ')
+        };
+        updatePatient(selectedPatientId, {
+          files: [...(selectedPatient?.files || []), fileObj]
+        });
+        toast("Fayl muvaffaqiyatli yuklandi!", "success");
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleHistoryFileDelete = (fileId) => {
+    if (!selectedPatient) return;
+    const updatedFiles = (selectedPatient.files || []).filter(f => f.id !== fileId);
+    updatePatient(selectedPatientId, { files: updatedFiles });
+    toast("Fayl muvaffaqiyatli o'chirildi", "success");
+  };
 
   const selectedPatient = useMemo(() => {
     return patients.find(p => p.id === selectedPatientId);
@@ -1193,6 +1236,60 @@ export function PatientHistorySection() {
                 <span><b>Telefon:</b> {selectedPatient.phone}</span>
                 {selectedPatient.roomId && <span><b>Xona:</b> #{selectedPatient.roomId.replace('RM-', '')}</span>}
               </div>
+            </div>
+
+            {/* Analizlar va Hujjatlar (File Section) */}
+            <div className="mt-4 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-white/5 shrink-0">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-sm text-gray-950 dark:text-white flex items-center gap-1.5">
+                  📁 Analizlar va Hujjatlar
+                </h4>
+                <label className="btn btn-primary btn-sm cursor-pointer py-1 px-3">
+                  <Upload size={14} /> Fayl yuklash
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleHistoryFileUpload}
+                  />
+                </label>
+              </div>
+
+              {selectedPatient.files && selectedPatient.files.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                  {selectedPatient.files.map(file => (
+                    <div key={file.id} className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800/80 shadow-sm text-[11px]">
+                      <div className="flex items-center gap-2 truncate max-w-[70%]">
+                        <span className="text-base shrink-0">{getFileIcon(file.name)}</span>
+                        <div className="truncate">
+                          <p className="font-semibold text-gray-800 dark:text-gray-200 truncate" title={file.name}>{file.name}</p>
+                          <p className="text-[9px] text-gray-450">{(file.size / 1024).toFixed(1)} KB • {file.date}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={file.content}
+                          download={file.name}
+                          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-blue-500 flex items-center justify-center"
+                          title="Yuklab olish"
+                        >
+                          <Download size={13} />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleHistoryFileDelete(file.id)}
+                          className="p-1 rounded-lg hover:bg-red-55 dark:hover:bg-red-500/10 text-red-500 flex items-center justify-center"
+                          title="O'chirish"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-450 italic text-center py-2">Hozircha analiz fayllari yuklanmagan.</p>
+              )}
             </div>
 
             {/* Timeline scroll */}
