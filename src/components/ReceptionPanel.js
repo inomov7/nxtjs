@@ -302,8 +302,31 @@ function PatientRegistration() {
       return;
     }
 
+    let processedBirthDate = form.birthDate ? form.birthDate.trim() : '';
+    if (processedBirthDate) {
+      // If only a 4-digit year is provided, e.g. 1990
+      if (/^\d{4}$/.test(processedBirthDate)) {
+        processedBirthDate = `${processedBirthDate}-01-01`;
+      } 
+      // If DD.MM.YYYY, e.g. 15.05.1990
+      else if (/^\d{2}\.\d{2}\.\d{4}$/.test(processedBirthDate)) {
+        const parts = processedBirthDate.split('.');
+        processedBirthDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      } 
+      // If DD/MM/YYYY, e.g. 15/05/1990
+      else if (/^\d{2}\/\d{2}\/\d{4}$/.test(processedBirthDate)) {
+        const parts = processedBirthDate.split('/');
+        processedBirthDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      // If YYYY.MM.DD or YYYY/MM/DD
+      else if (/^\d{4}[\./]\d{2}[\./]\d{2}$/.test(processedBirthDate)) {
+        processedBirthDate = processedBirthDate.replace(/[\./]/g, '-');
+      }
+    }
+
     const newPatient = addPatient({
       ...form,
+      birthDate: processedBirthDate,
       phone: normalizedPhone,
       visitReason: hasTreatment ? `Muolaja: ${treatmentName}` : form.visitReason,
       status: 'navbatda',
@@ -578,9 +601,10 @@ function PatientRegistration() {
                       <Calendar size={16} />
                     </span>
                     <input 
-                      className="input pl-9" 
-                      type="date" 
+                      className="input pl-9 text-sm" 
+                      type="text" 
                       value={form.birthDate} 
+                      placeholder="YYYY-MM-DD yoki faqat Yil (Masalan: 1995)"
                       onChange={e => setForm({ ...form, birthDate: e.target.value })} 
                     />
                   </div>
