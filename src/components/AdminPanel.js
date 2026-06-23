@@ -14,7 +14,7 @@ import {
   UserPlus, Search, Filter, TrendingUp, TrendingDown, Activity,
   AlertTriangle, Calendar, Clock, CheckCircle, XCircle, RefreshCw,
   Building2, Phone, Mail, MapPin, Shield, ChevronRight, Package,
-  FileText, CreditCard, PieChart, ArrowUpDown, User, Copy
+  FileText, CreditCard, PieChart, ArrowUpDown, User, Copy, Wallet
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart as RPieChart, Pie, Cell,
@@ -92,6 +92,13 @@ function AdminDashboard() {
     const freeRooms = rooms.filter(r => r.status === 'free').length;
     const busyRooms = rooms.filter(r => r.status === 'busy').length;
     const todayFinance = finances.find(f => f.date === today);
+    const todayExpense = todayFinance?.expense || 0;
+    
+    // Calculate global balance (all-time finances income minus expenses)
+    const totalIncome = finances.reduce((s, f) => s + f.income, 0);
+    const totalExpense = finances.reduce((s, f) => s + f.expense, 0);
+    const totalBalance = totalIncome - totalExpense;
+
     const monthIncome = finances.reduce((s, f) => s + f.income, 0);
     const queuePatients = patients.filter(p => p.queueStatus === 'waiting').length;
     const recoveredToday = patients.filter(p => p.status === 'tuzalgan' && p.visits?.some(v => v.date === today)).length;
@@ -101,6 +108,8 @@ function AdminDashboard() {
       todayPatients: todayPatients.length,
       freeRooms, busyRooms,
       todayIncome: todayFinance?.income || 0,
+      todayExpense,
+      totalBalance,
       monthIncome,
       queuePatients,
       recoveredToday,
@@ -134,6 +143,8 @@ function AdminDashboard() {
         <StatCard icon={<Users size={24} />} title="Bugungi bemorlar" value={stats.todayPatients} colorClass="stat-blue" />
         <StatCard icon={<BedDouble size={24} />} title="Bo'sh xonalar" value={`${stats.freeRooms} / ${rooms.length}`} subtitle={`${stats.busyRooms} ta band`} colorClass="stat-green" />
         <StatCard icon={<DollarSign size={24} />} title="Bugungi daromad" value={`${formatMoney(stats.todayIncome)} so'm`} colorClass="stat-yellow" />
+        <StatCard icon={<TrendingDown size={24} />} title="Bugungi chiqim" value={`${formatMoney(stats.todayExpense)} so'm`} colorClass="stat-red" />
+        <StatCard icon={<Wallet size={24} />} title="Joriy kassa qoldig'i" value={`${formatMoney(stats.totalBalance)} so'm`} colorClass="stat-green" />
         <StatCard icon={<TrendingUp size={24} />} title="Oylik daromad" value={`${formatMoney(stats.monthIncome)} so'm`} colorClass="stat-purple" />
         <StatCard icon={<Clock size={24} />} title="Navbatdagilar" value={stats.queuePatients} colorClass="stat-indigo" />
         <StatCard icon={<CheckCircle size={24} />} title="Tuzalganlar" value={stats.recoveredToday} subtitle="bugun" colorClass="stat-green" />
@@ -893,6 +904,26 @@ function ReportsSection() {
     });
   }, [staff, patients, payments, filterByDate]);
 
+  const financialStats = useMemo(() => {
+    const totalIncome = filteredPayments.reduce((s, p) => s + p.paid, 0);
+    const totalExpense = finances
+      .filter(f => filterByDate(f.date))
+      .reduce((s, f) => s + f.expense, 0);
+    const balance = totalIncome - totalExpense;
+    
+    // Global kassa qoldig'i
+    const globalIncome = payments.reduce((s, p) => s + p.paid, 0);
+    const globalExpense = finances.reduce((s, f) => s + f.expense, 0);
+    const globalBalance = globalIncome - globalExpense;
+
+    return {
+      totalIncome,
+      totalExpense,
+      balance,
+      globalBalance
+    };
+  }, [filteredPayments, finances, payments, filterByDate]);
+
   // 4. Financials tab calculations
   const methodStats = useMemo(() => {
     const map = {};
@@ -1072,6 +1103,13 @@ function ReportsSection() {
       {/* 2. FINANCIALS TAB */}
       {reportType === 'financials' && (
         <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeIn">
+            <StatCard icon={<DollarSign size={20} />} title="Kirim (Davr)" value={`${formatMoney(financialStats.totalIncome)} so'm`} colorClass="stat-green" />
+            <StatCard icon={<TrendingDown size={20} />} title="Chiqim (Davr)" value={`${formatMoney(financialStats.totalExpense)} so'm`} colorClass="stat-red" />
+            <StatCard icon={<TrendingUp size={20} />} title="Balans (Davr)" value={`${formatMoney(financialStats.balance)} so'm`} colorClass={financialStats.balance >= 0 ? 'stat-green' : 'stat-red'} />
+            <StatCard icon={<Wallet size={20} />} title="Joriy kassa qoldig'i" value={`${formatMoney(financialStats.globalBalance)} so'm`} colorClass="stat-blue" />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="card p-5 lg:col-span-2">
               <h3 className="font-bold text-gray-900 mb-4">Daromad tushum usuli bo&apos;yicha</h3>
@@ -1318,7 +1356,7 @@ function SettingsSection() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block uppercase tracking-wider">SMS xabar tarif narxi (so'm)</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block uppercase tracking-wider">SMS xabar tarif narxi (so&apos;m)</label>
               <input className="input w-44 font-mono font-bold" type="number" value={form.smsCost || 150} onChange={e => setForm({ ...form, smsCost: Number(e.target.value) })} />
             </div>
             
@@ -1384,6 +1422,8 @@ function SettingsSection() {
             </button>
           </div>
         </div>
+
+
 
         {/* Section 2: Shaxsiy Profil & Xavfsizlik */}
         <ProfileSettings />
@@ -1493,6 +1533,8 @@ function KpiManagement() {
       const totalRepayments = paymentHistory.filter(p => p.type === 'loan_repayment').reduce((s, p) => s + p.amount, 0);
       const totalPenalties = paymentHistory.filter(p => p.type === 'penalty').reduce((s, p) => s + p.amount, 0);
       const currentBalance = totalSalary + totalBonuses + totalRepayments - totalAdvances - totalLoans - totalPenalties;
+      const deductions = totalAdvances + totalLoans - totalRepayments + totalPenalties;
+      const netSalary = Math.max(0, totalSalary + totalBonuses - deductions);
       return {
         ...member,
         kpiLabel: config.label,
@@ -1508,6 +1550,7 @@ function KpiManagement() {
         totalRepayments,
         totalPenalties,
         currentBalance,
+        netSalary,
         status: member.salaryStatus || 'pending'
       };
     });
@@ -1557,8 +1600,8 @@ function KpiManagement() {
     const newPayment = {
       id: `PAY-${Date.now()}`,
       type: 'salary',
-      amount: Number(member.totalSalary),
-      note: "Maosh to'lovi",
+      amount: Number(member.netSalary),
+      note: "Maosh to'lovi (NET)",
       date: today,
       by: 'Admin'
     };
@@ -1570,12 +1613,12 @@ function KpiManagement() {
       paymentHistory 
     });
     
-    const updatedFinances = finances.map(f => f.date === today ? { ...f, expense: f.expense + member.totalSalary } : f);
+    const updatedFinances = finances.map(f => f.date === today ? { ...f, expense: f.expense + member.netSalary } : f);
     if (!finances.some(f => f.date === today)) {
-      updatedFinances.push({ date: today, income: 0, expense: member.totalSalary, patients: 0 });
+      updatedFinances.push({ date: today, income: 0, expense: member.netSalary, patients: 0 });
     }
     setFinances(updatedFinances);
-    addActivityLogEntry({ user: 'Admin', action: 'Xodimga maosh to\'landi', target: `${member.firstName} ${member.lastName} - ${formatMoney(member.totalSalary)} so'm` });
+    addActivityLogEntry({ user: 'Admin', action: 'Xodimga maosh to\'landi', target: `${member.firstName} ${member.lastName} - ${formatMoney(member.netSalary)} so'm` });
     toast(`${member.firstName} ${member.lastName}ga maosh to'landi.`, 'success');
     setConfirmPayout(null);
   };
@@ -1689,15 +1732,18 @@ function KpiManagement() {
           {/* Payroll Table */}
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="data-table">
+              <table className="data-table text-xs">
                 <thead>
                   <tr>
                     <th>Xodim</th>
                     <th>Lavozim</th>
                     <th>Asosiy maosh</th>
-                    <th>KPI Faolligi</th>
                     <th>KPI Bonus</th>
-                    <th>Jami maosh</th>
+                    <th>Bonus</th>
+                    <th>Avans</th>
+                    <th>Qarz (qoldig&apos;i)</th>
+                    <th>Jarima</th>
+                    <th className="text-green-700 bg-green-50 font-bold">Berish kerak (NET)</th>
                     <th className="no-print">Holat</th>
                     <th className="no-print">Amallar</th>
                   </tr>
@@ -1722,9 +1768,12 @@ function KpiManagement() {
                         </span>
                       </td>
                       <td className="font-medium">{formatMoney(member.salary)} so&apos;m</td>
-                      <td className="font-semibold">{member.kpiActivity} {member.kpiUnit}</td>
                       <td className="text-green-600 font-semibold">+{formatMoney(member.kpiBonus)} so&apos;m</td>
-                      <td className="font-bold text-gray-900">{formatMoney(member.totalSalary)} so&apos;m</td>
+                      <td className="text-green-600 font-semibold">+{formatMoney(member.totalBonuses)} so&apos;m</td>
+                      <td className="text-orange-600 font-semibold">-{formatMoney(member.totalAdvances)} so&apos;m</td>
+                      <td className="text-red-600 font-semibold">-{formatMoney(Math.max(0, member.totalLoans - member.totalRepayments))} so&apos;m</td>
+                      <td className="text-amber-600 font-semibold">-{formatMoney(member.totalPenalties)} so&apos;m</td>
+                      <td className="font-bold text-green-700 bg-green-50 dark:bg-green-900/20 text-sm">{formatMoney(member.netSalary)} so&apos;m</td>
                       <td className="no-print">
                         <span className={`badge ${member.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>
                           {member.status === 'paid' ? 'To\'landi' : 'Kutilmoqda'}
@@ -1855,7 +1904,7 @@ function KpiManagement() {
           confirmPayout 
             ? `${confirmPayout.lastSalaryPaidDate && confirmPayout.lastSalaryPaidDate.startsWith(new Date().toISOString().slice(0, 7)) 
                 ? "Siz bu oy uchun oylik bergansiz. Baribir to'lamoqchimisiz?\n\n" 
-                : ""}${confirmPayout.firstName} ${confirmPayout.lastName}ga jami ${formatMoney(confirmPayout.totalSalary)} so'm maosh to'lamoqchimisiz?` 
+                : ""}${confirmPayout.firstName} ${confirmPayout.lastName}ga jami ${formatMoney(confirmPayout.netSalary)} so'm maosh to'lamoqchimisiz?` 
             : ''
         }
         onConfirm={() => handlePay(confirmPayout)}
@@ -1890,13 +1939,21 @@ function KpiManagement() {
         {paymentModal && (
           <div className="space-y-5">
             {/* Staff info */}
-            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold" style={{ background: ROLES[paymentModal.role]?.color }}>
-                {paymentModal.firstName?.[0]}{paymentModal.lastName?.[0]}
+            <div className="bg-gray-50 p-4 rounded-xl space-y-2">
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Asosiy maosh:</span> <span>{formatMoney(paymentModal.salary)}</span>
               </div>
-              <div>
-                <p className="font-bold text-gray-900">{paymentModal.firstName} {paymentModal.lastName}</p>
-                <p className="text-xs text-gray-500">{ROLES[paymentModal.role]?.label} • Joriy balans: <span className="font-semibold text-gray-700">{formatMoney(payrollList.find(m => m.id === paymentModal.id)?.currentBalance || 0)} so&apos;m</span></p>
+              <div className="flex justify-between text-xs text-green-600">
+                <span>Bonuslar:</span> <span>+{formatMoney(paymentModal.totalBonuses)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-orange-600">
+                <span>Avanslar:</span> <span>-{formatMoney(paymentModal.totalAdvances)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-purple-600">
+                <span>Qarz qoldig'i:</span> <span>-{formatMoney(paymentModal.totalLoans - (paymentModal.totalRepayments || 0))}</span>
+              </div>
+              <div className="border-t pt-2 flex justify-between text-sm font-bold text-gray-900">
+                <span>NET (Jami):</span> <span>{formatMoney(paymentModal.salary + paymentModal.totalBonuses - paymentModal.totalAdvances - (paymentModal.totalLoans - (paymentModal.totalRepayments || 0)))}</span>
               </div>
             </div>
 
@@ -1975,6 +2032,7 @@ function SmsManagement() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [smsCostInput, setSmsCostInput] = useState(clinicSettings.smsCost || 150);
+  const [isOnline, setIsOnline] = useState(false);
 
   // New state for treatment reminder template
   const [scheduledTemplate, setScheduledTemplate] = useState(
@@ -1984,9 +2042,23 @@ function SmsManagement() {
 
   useEffect(() => {
     if (clinicSettings.scheduledSmsTemplate) {
-      setScheduledTemplate(clinicSettings.scheduledSmsTemplate);
+      setTimeout(() => setScheduledTemplate(clinicSettings.scheduledSmsTemplate), 0);
     }
   }, [clinicSettings.scheduledSmsTemplate]);
+
+  useEffect(() => {
+    if (clinicSettings.lastSmsPollTime) {
+      const checkOnline = () => {
+        const diff = Date.now() - new Date(clinicSettings.lastSmsPollTime).getTime();
+        setIsOnline(diff < 60000 * 5); // 5 mins
+      };
+      checkOnline();
+      const interval = setInterval(checkOnline, 10000);
+      return () => clearInterval(interval);
+    } else {
+      setTimeout(() => setIsOnline(false), 0);
+    }
+  }, [clinicSettings.lastSmsPollTime]);
 
   const handleSaveCost = () => {
     setClinicSettings({ ...clinicSettings, smsCost: Number(smsCostInput) });
@@ -2196,7 +2268,7 @@ function SmsManagement() {
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-gray-500 uppercase block">2. SMS Xabar Matni</label>
                 <button className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1" onClick={handleInsertTag}>
-                  + $nomer qo'shish
+                  + $nomer qo&apos;shish
                 </button>
               </div>
               <textarea
@@ -2210,7 +2282,7 @@ function SmsManagement() {
 
             <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50 rounded-xl p-3 text-xs">
               <span className="font-bold text-blue-800 dark:text-blue-400 block mb-1">SMS xabar namunasi:</span>
-              <p className="text-gray-700 dark:text-gray-300 italic font-mono">"{previewText}"</p>
+              <p className="text-gray-700 dark:text-gray-300 italic font-mono">&quot;{previewText}&quot;</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -2234,24 +2306,18 @@ function SmsManagement() {
 
           <div className="card p-5 flex flex-col gap-4 border-t-4 border-t-purple-500 shadow-md">
             <h3 className="font-bold text-gray-900 mb-2 border-b border-gray-100 pb-2 flex items-center justify-between">
-              <span>SMS Gateway & Sozlamalar</span>
+              <span>SMS Gateway &amp; Sozlamalar</span>
               {clinicSettings.lastSmsPollTime ? (
-                (() => {
-                  const diff = Date.now() - new Date(clinicSettings.lastSmsPollTime).getTime();
-                  const isOnline = diff < 60000 * 5; // 5 mins
-                  return (
-                    <span className={`badge ${isOnline ? 'badge-success' : 'badge-danger'} text-[10px] py-1`}>
-                      {isOnline ? "🟢 Onlayn" : "🔴 Offlayn"}
-                    </span>
-                  );
-                })()
+                <span className={`badge ${isOnline ? 'badge-success' : 'badge-danger'} text-[10px] py-1`}>
+                  {isOnline ? "🟢 Onlayn" : "🔴 Offlayn"}
+                </span>
               ) : (
                 <span className="badge badge-gray text-[10px] py-1">🔴 Offlayn</span>
               )}
             </h3>
             {clinicSettings.lastSmsPollTime && (
               <p className="text-[10px] text-gray-400 -mt-3 mb-1 font-mono">
-                Oxirgi bog'lanish: {new Date(clinicSettings.lastSmsPollTime).toLocaleString('uz-UZ')}
+                Oxirgi bog&apos;lanish: {new Date(clinicSettings.lastSmsPollTime).toLocaleString('uz-UZ')}
               </p>
             )}
 
@@ -2262,7 +2328,7 @@ function SmsManagement() {
               </div>
               <div className="flex gap-1 items-center">
                 <input className="input py-1 px-2 text-xs w-20 font-bold font-mono text-right" type="number" value={smsCostInput} onChange={e => setSmsCostInput(e.target.value)} />
-                <span className="text-xs text-gray-500 font-semibold">so'm</span>
+                <span className="text-xs text-gray-500 font-semibold">so&apos;m</span>
                 <button className="btn btn-primary btn-sm py-1 px-2 text-xs" onClick={handleSaveCost}>Saqlash</button>
               </div>
             </div>
@@ -2375,7 +2441,7 @@ function SmsManagement() {
               <tbody>
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-6 text-gray-400 italic">SMS jurnali bo'sh</td>
+                    <td colSpan={5} className="text-center py-6 text-gray-400 italic">SMS jurnali bo&apos;sh</td>
                   </tr>
                 ) : (
                   filteredLogs.map(sms => (

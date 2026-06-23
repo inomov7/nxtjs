@@ -38,6 +38,8 @@ export function CrmProvider({ children }) {
   const [suppliers, setSuppliers] = useState([]);
   const [smsQueue, setSmsQueue] = useState([]);
   const [treatments, setTreatments] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [staffAdvances, setStaffAdvances] = useState([]);
   const [initialized, setInitialized] = useState(false);
   const [theme, setTheme] = useState('light');
 
@@ -90,6 +92,8 @@ export function CrmProvider({ children }) {
       setSuppliers(data.suppliers || []);
       setSmsQueue(data.smsQueue || []);
       setTreatments(data.treatments || []);
+      setExpenses(data.expenses || []);
+      setStaffAdvances(data.staffAdvances || []);
     } catch (error) {
       console.error("Failed to load server data:", error);
     }
@@ -689,6 +693,97 @@ export function CrmProvider({ children }) {
     });
   }, [patients, saveToServer, addActivityLogEntry]);
 
+  // ===== EXPENSES (RASXODLAR) =====
+  const addExpense = useCallback((expense) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newExpense = { 
+      ...expense, 
+      id: generateId('EXP'), 
+      date: expense.date || today,
+      createdAt: new Date().toISOString()
+    };
+    setExpenses(prev => {
+      const next = [...prev, newExpense];
+      saveToServer('expenses', 'insert', newExpense);
+      return next;
+    });
+    // Update finances expense
+    setFinances(prev => {
+      let found = false;
+      const next = prev.map(f => {
+        if (f.date === newExpense.date) {
+          found = true;
+          return { ...f, expense: f.expense + (newExpense.amount || 0) };
+        }
+        return f;
+      });
+      if (!found) {
+        next.push({ date: newExpense.date, income: 0, expense: newExpense.amount || 0, patients: 0 });
+      }
+      saveToServer('finances', 'set_all', next);
+      return next;
+    });
+    addActivityLogEntry({ user: 'Resepshion', action: 'Xarajat yozildi', target: `${newExpense.description} - ${newExpense.amount?.toLocaleString()} so\'m` });
+    return newExpense;
+  }, [saveToServer, addActivityLogEntry]);
+
+  // ===== STAFF ADVANCES (AVANS/QARZ) =====
+  const addStaffAdvance = useCallback((advance) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newAdvance = {
+      ...advance,
+      id: generateId('ADV'),
+      date: today,
+      createdAt: new Date().toISOString(),
+      status: 'active' // 'active' | 'deducted'
+    };
+    setStaffAdvances(prev => {
+      const next = [...prev, newAdvance];
+      saveToServer('staffAdvances', 'insert', newAdvance);
+      return next;
+    });
+    addActivityLogEntry({ 
+      user: 'Admin', 
+      action: `Xodimga ${newAdvance.type} berildi`, 
+      target: `${newAdvance.staffName} - ${newAdvance.amount?.toLocaleString()} so\'m` 
+    });
+    return newAdvance;
+  }, [saveToServer, addActivityLogEntry]);
+
+  const updateStaffAdvance = useCallback((id, updates) => {
+    setStaffAdvances(prev => {
+      const next = prev.map(a => a.id === id ? { ...a, ...updates } : a);
+      saveToServer('staffAdvances', 'update', updates, id);
+      return next;
+    });
+  }, [saveToServer]);
+
+  // ===== DISCHARGE PATIENT FROM ROOM =====
+  const dischargePatient = useCallback((patientId, roomId) => {
+    const dischargeTime = new Date().toISOString();
+    updatePatient(patientId, { 
+      roomId: null, 
+      status: 'ambulatoriya',
+      dischargeTime 
+    });
+    // Update room status
+    if (roomId) {
+      setRooms(prev => {
+        const room = prev.find(r => r.id === roomId);
+        if (!room) return prev;
+        const roomPats = prev.filter ? 0 : 0; // will recompute from patients
+        const next = prev.map(r => r.id === roomId ? { ...r, status: 'free' } : r);
+        saveToServer('rooms', 'update', { status: 'free' }, roomId);
+        return next;
+      });
+    }
+    addPatientHistoryEvent(patientId, {
+      type: 'discharge',
+      title: 'Xonadan chiqarildi',
+      details: `Bemor xonadan chiqarildi. Vaqt: ${new Date().toLocaleString('uz-UZ')}`
+    });
+  }, [updatePatient, addPatientHistoryEvent, saveToServer]);
+
   const addCampaignSms = useCallback(async (smsList) => {
     setSmsQueue(prev => [...prev, ...smsList]);
     saveToServer('smsQueue', 'bulk_insert', smsList);
@@ -771,7 +866,10 @@ export function CrmProvider({ children }) {
     resetData, exportData,
     theme, toggleTheme,
     smsQueue, addSms: addCampaignSms, clearSmsQueue, retryFailedSms, deleteSms,
-    treatments, addTreatment, updateTreatment, deleteTreatment
+    treatments, addTreatment, updateTreatment, deleteTreatment,
+    expenses, addExpense,
+    staffAdvances, addStaffAdvance, updateStaffAdvance,
+    dischargePatient
   };
 
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>;

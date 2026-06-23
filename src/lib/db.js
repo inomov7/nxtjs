@@ -176,6 +176,16 @@ export async function readDb() {
       value TEXT
     )`);
 
+    await run(db, `CREATE TABLE IF NOT EXISTS expenses (
+      id TEXT PRIMARY KEY,
+      value TEXT
+    )`);
+
+    await run(db, `CREATE TABLE IF NOT EXISTS staffAdvances (
+      id TEXT PRIMARY KEY,
+      value TEXT
+    )`);
+
     await run(db, `CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       userId TEXT,
@@ -249,7 +259,7 @@ export async function readDb() {
     const tables = [
       'staff', 'rooms', 'patients', 'medicines', 'services', 'finances',
       'payments', 'prescriptionQueue', 'notifications', 'activityLog',
-      'callLog', 'suppliers', 'smsQueue', 'treatments'
+      'callLog', 'suppliers', 'smsQueue', 'treatments', 'expenses', 'staffAdvances'
     ];
 
     for (const t of tables) {
@@ -462,7 +472,8 @@ export async function deleteDb() {
     const tables = [
       'staff', 'rooms', 'patients', 'medicines', 'services', 'finances',
       'payments', 'prescriptionQueue', 'notifications', 'activityLog',
-      'clinicSettings', 'callLog', 'suppliers', 'sessions', 'smsQueue', 'treatments'
+      'clinicSettings', 'callLog', 'suppliers', 'sessions', 'smsQueue', 'treatments',
+      'expenses', 'staffAdvances'
     ];
     for (const t of tables) {
       await run(db, `DROP TABLE IF EXISTS ${t}`);

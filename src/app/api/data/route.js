@@ -46,6 +46,10 @@ export async function POST(request) {
 
     if (action === 'insert') {
       await insertEntity(table, data);
+      if (table === 'patients') {
+        const { checkAndSendTelegramPatients } = await import('@/lib/telegram');
+        checkAndSendTelegramPatients().catch(err => console.error("Telegram check error:", err));
+      }
     } else if (action === 'update') {
       await updateEntity(table, id, data);
     } else if (action === 'delete') {

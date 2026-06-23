@@ -48,6 +48,7 @@ export async function GET(request) {
         id: sms.id,
         phone: sms.phone,
         message: sms.message,
+        sim: Number(sms.sim ?? 0),
         status: "wait"
       }));
 
