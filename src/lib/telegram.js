@@ -61,16 +61,16 @@ export async function checkAndSendTelegramPatients() {
         console.log(`[Telegram Bot] Successfully sent Excel file with 20 patients.`);
         
         // Update database: mark these 20 patients as telegramSent = true
-        const { openDb, run } = await import('./db');
+        const { openDb, run, get } = await import('./db');
         const db = await openDb();
         try {
           await run(db, 'BEGIN TRANSACTION');
           for (const p of batch) {
-            const row = await db.get(`SELECT value FROM patients WHERE id = ?`, [p.id]);
+            const row = await get(db, `SELECT value FROM patients WHERE id = ?`, [p.id]);
             if (row) {
               const currentVal = JSON.parse(row.value);
               currentVal.telegramSent = true;
-              await db.run(`UPDATE patients SET value = ? WHERE id = ?`, [JSON.stringify(currentVal), p.id]);
+              await run(db, `UPDATE patients SET value = ? WHERE id = ?`, [JSON.stringify(currentVal), p.id]);
             }
           }
           await run(db, 'COMMIT');

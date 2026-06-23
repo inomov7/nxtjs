@@ -13,7 +13,7 @@ import {
   BarChart3, Search, Plus, Clock, CheckCircle, XCircle,
   ArrowUp, Printer, User, Phone, Calendar, MapPin,
   ChevronRight, AlertCircle, FileText, Settings, Shield, Tag, Copy, Edit,
-  DoorOpen, TrendingDown, Receipt, Wallet, Coins, Stethoscope
+  DoorOpen, TrendingDown, Receipt, Wallet, Coins, Stethoscope, X
 } from 'lucide-react';
 
 const TABS = [
