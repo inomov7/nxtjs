@@ -114,6 +114,48 @@ export function Modal({ isOpen, onClose, title, children, size = 'default' }) {
   );
 }
 
+// ===== SLIDE-OVER DRAWER =====
+export function Drawer({ isOpen, onClose, title, children, size = 'default' }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !mounted) return null;
+  
+  // Custom sizes: default (480px), lg (760px), xl (960px)
+  const sizeStyle = size === 'lg' ? { maxWidth: '760px' } : size === 'xl' ? { maxWidth: '960px' } : {};
+
+  return createPortal(
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer-content" style={sizeStyle} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
+          <button onClick={onClose} className="btn btn-icon btn-outline p-1.5">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 flex-1 overflow-y-auto">{children}</div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+
 // ===== NOTIFICATION BELL =====
 export function NotificationBell({ role }) {
   const { notifications, markNotificationRead, markAllNotificationsRead } = useCrm();

@@ -727,6 +727,41 @@ export function CrmProvider({ children }) {
     return newExpense;
   }, [saveToServer, addActivityLogEntry]);
 
+  // ===== INCOME (KIRIM) =====
+  const addIncome = useCallback((income) => {
+    const today = new Date().toISOString().split('T')[0];
+    const newIncome = { 
+      ...income, 
+      id: generateId('INC'), 
+      type: 'income',
+      date: income.date || today,
+      createdAt: new Date().toISOString()
+    };
+    setExpenses(prev => {
+      const next = [...prev, newIncome];
+      saveToServer('expenses', 'insert', newIncome);
+      return next;
+    });
+    // Update finances income
+    setFinances(prev => {
+      let found = false;
+      const next = prev.map(f => {
+        if (f.date === newIncome.date) {
+          found = true;
+          return { ...f, income: f.income + (newIncome.amount || 0) };
+        }
+        return f;
+      });
+      if (!found) {
+        next.push({ date: newIncome.date, income: newIncome.amount || 0, expense: 0, patients: 0 });
+      }
+      saveToServer('finances', 'set_all', next);
+      return next;
+    });
+    addActivityLogEntry({ user: 'Resepshion', action: 'Kirim yozildi', target: `${newIncome.description} - ${newIncome.amount?.toLocaleString()} so\'m` });
+    return newIncome;
+  }, [saveToServer, addActivityLogEntry]);
+
   // ===== STAFF ADVANCES (AVANS/QARZ) =====
   const addStaffAdvance = useCallback((advance) => {
     const today = new Date().toISOString().split('T')[0];
@@ -867,7 +902,7 @@ export function CrmProvider({ children }) {
     theme, toggleTheme,
     smsQueue, addSms: addCampaignSms, clearSmsQueue, retryFailedSms, deleteSms,
     treatments, addTreatment, updateTreatment, deleteTreatment,
-    expenses, addExpense,
+    expenses, addExpense, addIncome,
     staffAdvances, addStaffAdvance, updateStaffAdvance,
     dischargePatient
   };

@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useCrm } from '@/lib/CrmContext';
 import { ROLES, BLOOD_GROUPS, ROOM_STATUSES, generateId } from '@/lib/demoData';
 import {
-  Sidebar, Header, StatCard, Modal, TabNav, useToast,
+  Sidebar, Header, StatCard, Modal, Drawer, TabNav, useToast,
   formatMoney, formatDate, getAge, EmptyState, ConfirmDialog, ProfileSettings,
   PatientHistorySection, normalizeUzPhone
 } from './SharedComponents';
@@ -13,7 +13,8 @@ import {
   BarChart3, Search, Plus, Clock, CheckCircle, XCircle,
   ArrowUp, Printer, User, Phone, Calendar, MapPin,
   ChevronRight, AlertCircle, FileText, Settings, Shield, Tag, Copy, Edit,
-  DoorOpen, TrendingDown, Receipt, Wallet, Coins, Stethoscope, X
+  DoorOpen, TrendingDown, TrendingUp, Receipt, Wallet, Coins, Stethoscope, X,
+  Filter, Upload, Download, Trash2, Heart
 } from 'lucide-react';
 
 const TABS = [
@@ -22,7 +23,7 @@ const TABS = [
   { key: 'rooms', label: 'Xona Tanlash', icon: <BedDouble size={18} /> },
   { key: 'payment', label: "To'lov", icon: <CreditCard size={18} /> },
   { key: 'treatments', label: 'Licheniya', icon: <Calendar size={18} /> },
-  { key: 'expenses', label: 'Xarajatlar', icon: <Receipt size={18} /> },
+  { key: 'expenses', label: 'Kirim-Chiqim', icon: <Receipt size={18} /> },
   { key: 'patients', label: 'Mijozlar Tarixi', icon: <Clock size={18} /> },
   { key: 'calls', label: "Qo'ng'iroqlar", icon: <PhoneCall size={18} /> },
   { key: 'report', label: 'Hisobot', icon: <BarChart3 size={18} /> },
@@ -2923,61 +2924,798 @@ function CallLogSection() {
 
 // ===== RECEPTION REPORT =====
 function ReceptionReport() {
-  const { patients, payments, expenses } = useCrm();
+  const { patients, payments, expenses, staff, treatments, updatePatient } = useCrm();
+  const toast = useToast();
   const today = new Date().toISOString().split('T')[0];
 
-  const todayPatients = patients.filter(p => p.admissionDate === today);
-  const todayPayments = payments.filter(p => p.date === today);
-  const todayIncome = todayPayments.reduce((s, p) => s + p.paid, 0);
-  const todayExpenses = (expenses || []).filter(e => e.date === today).reduce((s, e) => s + (e.amount || 0), 0);
-  const todayBalance = todayIncome - todayExpenses;
+  // Filters State
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [activePreset, setActivePreset] = useState('today');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterVisitType, setFilterVisitType] = useState('all');
+  const [filterDoctor, setFilterDoctor] = useState('all');
+  const [filterGender, setFilterGender] = useState('all');
+  const [filterRegion, setFilterRegion] = useState('all');
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Jami kassa
-  const totalIncome = payments.reduce((s, p) => s + p.paid, 0);
-  const totalExpenses = (expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
-  const totalBalance = totalIncome - totalExpenses;
+  // Drawer & Tabs State
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [drawerTab, setDrawerTab] = useState('general');
 
-  const cancelledQueues = todayPatients.filter(p => p.queueStatus === 'no-show').length;
+
+
+  // Date presets setter
+  const setPreset = (preset) => {
+    const now = new Date();
+    const format = (d) => d.toISOString().split('T')[0];
+    
+    if (preset === 'today') {
+      setStartDate(today);
+      setEndDate(today);
+    } else if (preset === 'yesterday') {
+      const yesterday = new Date(Date.now() - 86400000);
+      setStartDate(format(yesterday));
+      setEndDate(format(yesterday));
+    } else if (preset === 'last7') {
+      const last7 = new Date(Date.now() - 7 * 86400000);
+      setStartDate(format(last7));
+      setEndDate(today);
+    } else if (preset === 'month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(format(startOfMonth));
+      setEndDate(today);
+    } else if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+    }
+    setActivePreset(preset);
+  };
+
+  // Base range filters
+  const rangePatients = useMemo(() => {
+    return patients.filter(p => {
+      if (startDate && p.admissionDate < startDate) return false;
+      if (endDate && p.admissionDate > endDate) return false;
+      return true;
+    });
+  }, [patients, startDate, endDate]);
+
+  const rangePayments = useMemo(() => {
+    return payments.filter(p => {
+      if (startDate && p.date < startDate) return false;
+      if (endDate && p.date > endDate) return false;
+      return true;
+    });
+  }, [payments, startDate, endDate]);
+
+  const rangeExpenses = useMemo(() => {
+    return (expenses || []).filter(e => {
+      if (startDate && e.date < startDate) return false;
+      if (endDate && e.date > endDate) return false;
+      return true;
+    });
+  }, [expenses, startDate, endDate]);
+
+  // Stat computations based on range
+  const rangeIncome = useMemo(() => {
+    const paymentSum = rangePayments.reduce((s, p) => s + (p.paid || 0), 0);
+    const otherIncomeSum = rangeExpenses.filter(e => e.type === 'income').reduce((s, e) => s + (e.amount || 0), 0);
+    return paymentSum + otherIncomeSum;
+  }, [rangePayments, rangeExpenses]);
+
+  const rangeOutflow = useMemo(() => {
+    return rangeExpenses.filter(e => e.type !== 'income').reduce((s, e) => s + (e.amount || 0), 0);
+  }, [rangeExpenses]);
+
+  const rangeBalance = rangeIncome - rangeOutflow;
+  const rangeCancelled = rangePatients.filter(p => p.queueStatus === 'no-show').length;
+
+  // Payments total map per patient (all-time)
+  const patientPaymentMap = useMemo(() => {
+    const map = {};
+    payments.forEach(p => {
+      if (!map[p.patientId]) map[p.patientId] = 0;
+      map[p.patientId] += (p.paid || 0);
+    });
+    return map;
+  }, [payments]);
+
+  // Extract unique regions for filter
+  const regions = useMemo(() => {
+    const set = new Set();
+    patients.forEach(p => {
+      if (p.address?.region) set.add(p.address.region);
+    });
+    return Array.from(set).sort();
+  }, [patients]);
+
+  // Extract doctors
+  const doctorsList = useMemo(() => {
+    return staff.filter(s => s.role === 'doctor');
+  }, [staff]);
+
+  // Main filtered patients for table display
+  const filteredPatients = useMemo(() => {
+    return rangePatients.filter(p => {
+      // 1. Search Query
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const fullname = `${p.firstName || ''} ${p.lastName || ''} ${p.middleName || ''}`.toLowerCase();
+        const matchesSearch = fullname.includes(q) ||
+          p.id.toLowerCase().includes(q) ||
+          (p.phone && p.phone.includes(searchQuery)) ||
+          (p.visitReason && p.visitReason.toLowerCase().includes(q));
+        if (!matchesSearch) return false;
+      }
+
+      // 2. Status
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'active') {
+          if (!['navbatda', 'stasionar', 'ambulatoriya'].includes(p.status)) return false;
+        } else if (p.status !== filterStatus && p.queueStatus !== filterStatus) {
+          return false;
+        }
+      }
+
+      // 3. Visit Type
+      if (filterVisitType !== 'all') {
+        if (p.visitType !== filterVisitType) return false;
+      }
+
+      // 4. Doctor
+      if (filterDoctor !== 'all') {
+        if (p.doctorId !== filterDoctor && p.assignedDoctor !== filterDoctor) return false;
+      }
+
+      // 5. Gender
+      if (filterGender !== 'all') {
+        if (p.gender !== filterGender) return false;
+      }
+
+      // 6. Region
+      if (filterRegion !== 'all') {
+        if (p.address?.region !== filterRegion) return false;
+      }
+
+      // 7. Payment status
+      if (filterPaymentStatus !== 'all') {
+        const patPayments = payments.filter(pay => pay.patientId === p.id);
+        const totalPaid = patPayments.reduce((s, pay) => s + (pay.paid || 0), 0);
+        const totalBilled = patPayments.reduce((s, pay) => s + (pay.totalAmount || 0), 0);
+        const debt = totalBilled - totalPaid;
+        
+        if (filterPaymentStatus === 'paid') {
+          if (totalBilled === 0 || debt > 0) return false;
+        } else if (filterPaymentStatus === 'partial') {
+          if (totalPaid === 0 || debt <= 0) return false;
+        } else if (filterPaymentStatus === 'unpaid') {
+          if (totalBilled === 0 || totalPaid > 0) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [rangePatients, searchQuery, filterStatus, filterVisitType, filterDoctor, filterGender, filterRegion, filterPaymentStatus, payments]);
+
+  // Helper details extractors
+  const getPatientTreatments = (patientId) => treatments.filter(t => t.patientId === patientId);
+  const getPatientPayments = (patientId) => payments.filter(p => p.patientId === patientId);
+  const getDoctor = (doctorId) => staff.find(s => s.id === doctorId);
+
+  // File type icons
+  const getFileIcon = (filename) => {
+    const ext = filename.split('.').pop().toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) return '🖼️';
+    if (ext === 'pdf') return '📕';
+    if (['doc', 'docx'].includes(ext)) return '📘';
+    if (['xls', 'xlsx'].includes(ext)) return '📗';
+    return '📄';
+  };
+
+  // Local File handlers
+  const handleHistoryFileUpload = (e) => {
+    if (!selectedPatient) return;
+    const uploadedFiles = Array.from(e.target.files);
+    uploadedFiles.forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        toast("Fayl hajmi 5MB dan oshmasligi kerak", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const fileObj = {
+          id: 'FL-' + Date.now() + Math.random().toString(36).substring(2, 5).toUpperCase(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          content: reader.result,
+          date: new Date().toLocaleDateString('uz-UZ')
+        };
+        const updatedFiles = [...(selectedPatient.files || []), fileObj];
+        updatePatient(selectedPatient.id, { files: updatedFiles });
+        setSelectedPatient(prev => ({ ...prev, files: updatedFiles }));
+        toast("Fayl muvaffaqiyatli yuklandi!", "success");
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleHistoryFileDelete = (fileId) => {
+    if (!selectedPatient) return;
+    const updatedFiles = (selectedPatient.files || []).filter(f => f.id !== fileId);
+    updatePatient(selectedPatient.id, { files: updatedFiles });
+    setSelectedPatient(prev => ({ ...prev, files: updatedFiles }));
+    toast("Fayl muvaffaqiyatli o'chirildi", "success");
+  };
 
   return (
     <div>
-      <Header title="Resepshion Hisoboti" subtitle={formatDate(today)} role="reception" />
+      <Header title="Resepshion Hisoboti" subtitle={startDate && endDate ? `${formatDate(startDate)} dan ${formatDate(endDate)} gacha` : "Barcha davrlar"} role="reception" />
 
+      {/* Date Presets and Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-        <StatCard icon={<User size={24} />} title="Qabul qilingan" value={todayPatients.length} colorClass="stat-blue" />
-        <StatCard icon={<CreditCard size={24} />} title="Bugungi kirim" value={`${formatMoney(todayIncome)} so'm`} colorClass="stat-green" />
-        <StatCard icon={<TrendingDown size={24} />} title="Bugungi chiqim" value={`${formatMoney(todayExpenses)} so'm`} colorClass="stat-red" />
-        <StatCard icon={<Wallet size={24} />} title="Kassa qoldig'i" value={`${formatMoney(totalBalance)} so'm`} colorClass="stat-green" />
-        <StatCard icon={<XCircle size={24} />} title="Bekor qilingan" value={cancelledQueues} colorClass="stat-red" />
+        <StatCard icon={<User size={24} />} title="Range: Qabul" value={rangePatients.length} colorClass="stat-blue" />
+        <StatCard icon={<CreditCard size={24} />} title="Range: Kirim" value={`${formatMoney(rangeIncome)} so'm`} colorClass="stat-green" />
+        <StatCard icon={<TrendingDown size={24} />} title="Range: Chiqim" value={`${formatMoney(rangeOutflow)} so'm`} colorClass="stat-red" />
+        <StatCard icon={<Wallet size={24} />} title="Range: Balans" value={`${formatMoney(rangeBalance)} so'm`} colorClass="stat-green" />
+        <StatCard icon={<XCircle size={24} />} title="Range: Bekor" value={rangeCancelled} colorClass="stat-red" />
       </div>
 
+      {/* Advanced Filter Bar */}
+      <div className="card p-5 mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+          <h4 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Filter size={18} className="text-blue-500" /> Kengaytirilgan hisobot filtrlari
+          </h4>
+          <div className="flex gap-1 bg-gray-150 dark:bg-zinc-800 p-1 rounded-xl">
+            <button className={`btn btn-sm py-1 px-3 rounded-lg border-none text-xs font-semibold ${activePreset === 'today' ? 'bg-white dark:bg-zinc-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setPreset('today')}>Bugun</button>
+            <button className={`btn btn-sm py-1 px-3 rounded-lg border-none text-xs font-semibold ${activePreset === 'yesterday' ? 'bg-white dark:bg-zinc-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setPreset('yesterday')}>Kecha</button>
+            <button className={`btn btn-sm py-1 px-3 rounded-lg border-none text-xs font-semibold ${activePreset === 'last7' ? 'bg-white dark:bg-zinc-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setPreset('last7')}>7 kun</button>
+            <button className={`btn btn-sm py-1 px-3 rounded-lg border-none text-xs font-semibold ${activePreset === 'month' ? 'bg-white dark:bg-zinc-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setPreset('month')}>Shu oy</button>
+            <button className={`btn btn-sm py-1 px-3 rounded-lg border-none text-xs font-semibold ${activePreset === 'all' ? 'bg-white dark:bg-zinc-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900'}`} onClick={() => setPreset('all')}>Barchasi</button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Boshlanish sanasi</label>
+            <input type="date" className="input text-sm w-full" value={startDate} onChange={e => { setStartDate(e.target.value); setActivePreset('custom'); }} />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Tugash sanasi</label>
+            <input type="date" className="input text-sm w-full" value={endDate} onChange={e => { setEndDate(e.target.value); setActivePreset('custom'); }} />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Biriktirilgan shifokor</label>
+            <select className="input select text-sm w-full" value={filterDoctor} onChange={e => setFilterDoctor(e.target.value)}>
+              <option value="all">Barcha shifokorlar</option>
+              {doctorsList.map(d => <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Bemor holati</label>
+            <select className="input select text-sm w-full" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+              <option value="all">Barcha holatlar</option>
+              <option value="navbatda">Navbatda (kutilmoqda)</option>
+              <option value="in-progress">Ko&apos;rikda</option>
+              <option value="completed">Tugallangan</option>
+              <option value="stasionar">Stasionar</option>
+              <option value="ambulatoriya">Ambulatoriya</option>
+              <option value="tuzalgan">Tuzalgan</option>
+              <option value="no-show">Kelmadi</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">To&apos;lov holati</label>
+            <select className="input select text-sm w-full" value={filterPaymentStatus} onChange={e => setFilterPaymentStatus(e.target.value)}>
+              <option value="all">Barcha holatlar</option>
+              <option value="paid">To&apos;liq to&apos;langan</option>
+              <option value="partial">Qisman to&apos;langan</option>
+              <option value="unpaid">Qarzi bor (To&apos;lanmagan)</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Qabul turi</label>
+            <select className="input select text-sm w-full" value={filterVisitType} onChange={e => setFilterVisitType(e.target.value)}>
+              <option value="all">Barcha turlar</option>
+              <option value="Birinchi marta">Birinchi marta</option>
+              <option value="Qayta">Qayta</option>
+              <option value="Tez yordam">Tez yordam</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Hudud / Viloyat</label>
+            <select className="input select text-sm w-full" value={filterRegion} onChange={e => setFilterRegion(e.target.value)}>
+              <option value="all">Barcha hududlar</option>
+              {regions.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Jinsi</label>
+            <select className="input select text-sm w-full" value={filterGender} onChange={e => setFilterGender(e.target.value)}>
+              <option value="all">Barchasi</option>
+              <option value="Erkak">Erkak</option>
+              <option value="Ayol">Ayol</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <button className="btn btn-outline py-2 px-4 text-xs font-semibold" onClick={() => {
+            setStartDate(today);
+            setEndDate(today);
+            setActivePreset('today');
+            setFilterStatus('all');
+            setFilterVisitType('all');
+            setFilterDoctor('all');
+            setFilterGender('all');
+            setFilterRegion('all');
+            setFilterPaymentStatus('all');
+            setSearchQuery('');
+          }}>
+            Filtrlarni tozalash
+          </button>
+        </div>
+      </div>
+
+      {/* Main Results Card */}
       <div className="card p-5">
-        <h4 className="font-bold text-gray-900 mb-3">Bugungi bemorlar</h4>
-        <table className="data-table">
-          <thead>
-            <tr><th>Bemor</th><th>ID</th><th>Kelish sababi</th><th>Turi</th><th>Holat</th></tr>
-          </thead>
-          <tbody>
-            {todayPatients.map(p => (
-              <tr key={p.id}>
-                <td className="text-sm font-medium">{p.firstName} {p.lastName}</td>
-                <td className="text-sm text-gray-500">{p.id}</td>
-                <td className="text-sm">{p.visitReason}</td>
-                <td><span className="badge badge-info">{p.visitType}</span></td>
-                <td>
-                  <span className={`badge ${p.queueStatus === 'completed' ? 'badge-success' : p.queueStatus === 'waiting' ? 'badge-warning' : p.queueStatus === 'in-progress' ? 'badge-info' : 'badge-danger'}`}>
-                    {p.queueStatus}
-                  </span>
-                </td>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <h4 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            Mijozlar ro&apos;yxati ({filteredPatients.length} ta bemor)
+          </h4>
+          <div className="relative w-full sm:w-80">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              className="input pl-9 pr-3"
+              placeholder="Ism, telefon, ID yoki kelish sababi..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                onClick={() => setSearchQuery('')}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Bemor</th>
+                <th>Sana</th>
+                <th>Telefon</th>
+                <th>Kelish sababi</th>
+                <th>Turi</th>
+                <th>To&apos;lagan</th>
+                <th>Holat</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredPatients.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400 italic">
+                  Tanlangan parametrlar bo&apos;yicha bemorlar topilmadi
+                </td></tr>
+              ) : (
+                filteredPatients.map(p => (
+                  <tr
+                    key={p.id}
+                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    onClick={() => { setSelectedPatient(p); setDrawerTab('general'); }}
+                  >
+                    <td className="text-sm font-medium">
+                      <div>{p.firstName} {p.lastName}</div>
+                      <div className="text-[10px] text-gray-400 font-mono">{p.id}</div>
+                    </td>
+                    <td className="text-sm">{p.admissionDate}</td>
+                    <td className="text-sm text-gray-600">{p.phone || '—'}</td>
+                    <td className="text-sm max-w-[200px] truncate">{p.visitReason || '—'}</td>
+                    <td>
+                      <span className="badge badge-info">{p.visitType || 'Ambulatoriya'}</span>
+                    </td>
+                    <td className="text-sm font-bold font-mono text-green-600">
+                      {patientPaymentMap[p.id] ? `${formatMoney(patientPaymentMap[p.id])} so'm` : <span className="text-gray-400 font-normal">0</span>}
+                    </td>
+                    <td>
+                      <span className={`badge ${
+                        p.queueStatus === 'completed' || p.status === 'tuzalgan' ? 'badge-success' :
+                        p.queueStatus === 'waiting' || p.status === 'navbatda' ? 'badge-warning' :
+                        p.queueStatus === 'in-progress' || p.status === 'stasionar' ? 'badge-info' : 'badge-danger'
+                      }`}>
+                        {p.queueStatus || p.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="flex gap-3 mt-4 no-print">
         <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Chop etish</button>
       </div>
+
+      {/* Slide-over Patient Drawer */}
+      <Drawer isOpen={!!selectedPatient} onClose={() => setSelectedPatient(null)} title={selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName} — Mijoz kartochkasi` : ''} size="lg">
+        {selectedPatient && (() => {
+          const patPayments = getPatientPayments(selectedPatient.id);
+          const patTreatments = getPatientTreatments(selectedPatient.id);
+          const doctor = getDoctor(selectedPatient.assignedDoctor || selectedPatient.doctorId);
+          
+          const totalPaid = patPayments.reduce((s, p) => s + (p.paid || 0), 0);
+          const totalBilled = patPayments.reduce((s, p) => s + (p.totalAmount || 0), 0);
+          const debt = totalBilled - totalPaid;
+
+          return (
+            <div className="flex flex-col h-full">
+              {/* Tabs navigation */}
+              <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-2 mb-4 overflow-x-auto shrink-0">
+                <button className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-none ${drawerTab === 'general' ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-gray-300'}`} onClick={() => setDrawerTab('general')}>Umumiy</button>
+                <button className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-none ${drawerTab === 'medical' ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-gray-300'}`} onClick={() => setDrawerTab('medical')}>Tibbiy Tarix</button>
+                <button className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-none ${drawerTab === 'treatments' ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-gray-300'}`} onClick={() => setDrawerTab('treatments')}>Muolaja & Dorilar</button>
+                <button className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-none ${drawerTab === 'financial' ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-gray-300'}`} onClick={() => setDrawerTab('financial')}>To&apos;lovlar</button>
+                <button className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-none ${drawerTab === 'documents' ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-gray-300'}`} onClick={() => setDrawerTab('documents')}>Analizlar & Hujjatlar</button>
+              </div>
+
+              {/* Tab Contents */}
+              <div className="flex-1 space-y-4">
+                
+                {/* 1. GENERAL TAB */}
+                {drawerTab === 'general' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-2xl p-5 border border-blue-100/50 dark:border-blue-900/30">
+                      <h4 className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-4 flex items-center gap-1.5"><User size={16} /> Shaxsiy ma&apos;lumotlar</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-sm">
+                        <p><span className="text-gray-400">F.I.SH:</span> <span className="font-semibold text-gray-900 dark:text-white">{selectedPatient.firstName} {selectedPatient.lastName} {selectedPatient.middleName || ''}</span></p>
+                        <p><span className="text-gray-400">Bemor ID:</span> <span className="font-mono font-medium text-gray-800 dark:text-gray-200">{selectedPatient.id}</span></p>
+                        <p><span className="text-gray-400">Tug&apos;ilgan sana:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedPatient.birthDate || '—'} {selectedPatient.birthDate && `(${getAge(selectedPatient.birthDate)} yosh)`}</span></p>
+                        <p><span className="text-gray-400">Jinsi:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedPatient.gender || '—'}</span></p>
+                        <p><span className="text-gray-400">Telefon:</span> <span className="font-mono font-medium text-gray-900 dark:text-white">{selectedPatient.phone || '—'}</span></p>
+                        <p><span className="text-gray-400">Qo&apos;shimcha tel:</span> <span className="font-mono font-medium text-gray-900 dark:text-white">{selectedPatient.phone2 || '—'}</span></p>
+                        <p><span className="text-gray-400">Millati:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedPatient.nationality || '—'}</span></p>
+                        <p><span className="text-gray-400">Qon guruhi:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedPatient.bloodGroup || '—'}</span></p>
+                        <p className="sm:col-span-2"><span className="text-gray-400">Yashash manzili:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedPatient.address ? `${selectedPatient.address.region || ''} ${selectedPatient.address.district || ''} ${selectedPatient.address.street || ''}`.trim() : '—'}</span></p>
+                        <p className="sm:col-span-2"><span className="text-gray-400">E-mail:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedPatient.email || '—'}</span></p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 dark:bg-zinc-900/50 rounded-2xl p-5 border border-gray-150 dark:border-zinc-800">
+                      <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-1.5"><Heart size={15} className="text-red-500" /> Sog&apos;liq ko&apos;rsatkichlari & Allergiyalar</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <span className="text-xs font-bold text-gray-400 uppercase block mb-1">Allergiyalar</span>
+                          {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedPatient.allergies.map(a => <span key={a} className="badge badge-danger text-xs px-2.5 py-1">{a}</span>)}
+                            </div>
+                          ) : <span className="text-sm text-gray-500 italic">Mavjud emas</span>}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-gray-400 uppercase block mb-1">Surunkali kasalliklar</span>
+                          {selectedPatient.chronicDiseases && selectedPatient.chronicDiseases.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedPatient.chronicDiseases.map(c => <span key={c} className="badge badge-warning text-xs px-2.5 py-1">{c}</span>)}
+                            </div>
+                          ) : <span className="text-sm text-gray-500 italic">Mavjud emas</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedPatient.insurance ? (
+                      <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/10 dark:to-pink-950/10 rounded-2xl p-5 border border-purple-100/50 dark:border-purple-900/20">
+                        <h4 className="text-sm font-bold text-purple-700 dark:text-purple-400 mb-3 flex items-center gap-1.5">🛡️ Tibbiy sug&apos;urta</h4>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <p><span className="text-gray-400">Sug&apos;urta kompaniyasi:</span> <span className="font-semibold block mt-0.5 text-gray-800 dark:text-gray-200">{selectedPatient.insurance.company}</span></p>
+                          <p><span className="text-gray-400">Polis raqami:</span> <span className="font-mono block mt-0.5 text-gray-800 dark:text-gray-200">{selectedPatient.insurance.policyNumber}</span></p>
+                          <p className="col-span-2"><span className="text-gray-400">Amal qilish muddati:</span> <span className="font-medium block mt-0.5 text-gray-800 dark:text-gray-200">{selectedPatient.insurance.validUntil}</span></p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-100/55 dark:bg-zinc-800/30 rounded-2xl border border-dashed border-gray-250 dark:border-zinc-850 text-center text-xs text-gray-400">
+                        Sug&apos;urta polisi biriktirilmagan
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. MEDICAL HISTORY TAB */}
+                {drawerTab === 'medical' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-2xl p-5 border border-green-100/50 dark:border-green-900/30">
+                      <h4 className="text-sm font-bold text-green-700 dark:text-green-400 mb-4 flex items-center gap-1.5"><Stethoscope size={16} /> Tibbiy holat</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-sm">
+                        <p><span className="text-gray-400">Kelish sababi:</span> <span className="font-medium text-gray-900 dark:text-white block mt-0.5">{selectedPatient.visitReason || '—'}</span></p>
+                        <p><span className="text-gray-400">Qo&apos;yilgan tashxis:</span> <span className="font-semibold text-gray-900 dark:text-white block mt-0.5">{selectedPatient.diagnosis || '—'}</span></p>
+                        <p><span className="text-gray-400">Qabul shifokori:</span> <span className="font-medium text-gray-900 dark:text-white block mt-0.5">{doctor ? `${doctor.firstName} ${doctor.lastName} (${doctor.specialization || 'Shifokor'})` : '—'}</span></p>
+                        <p><span className="text-gray-400">Palata (Stasionar):</span> <span className="font-semibold text-gray-900 dark:text-white block mt-0.5">{selectedPatient.roomId ? `Palata #${selectedPatient.roomId.replace('RM-', '')}` : 'Ambulator davolanishda'}</span></p>
+                        <p><span className="text-gray-400">Kelgan sana:</span> <span className="font-medium text-gray-900 dark:text-white block mt-0.5">{selectedPatient.admissionDate} {selectedPatient.queueTime && `soat ${selectedPatient.queueTime}`}</span></p>
+                        <p><span className="text-gray-400">Ketish / Javob sanasi:</span> <span className="font-medium text-gray-900 dark:text-white block mt-0.5">{selectedPatient.expectedDischarge || '—'}</span></p>
+                        <p><span className="text-gray-400">Tizimdagi holati:</span> <span className="block mt-1"><span className={`badge ${selectedPatient.status === 'stasionar' ? 'badge-danger' : selectedPatient.status === 'tuzalgan' ? 'badge-success' : 'badge-info'}`}>{selectedPatient.status}</span></span></p>
+                        <p><span className="text-gray-400">Umumiy ahvoli:</span> <span className="block mt-1"><span className={`badge ${selectedPatient.overallCondition === 'good' ? 'badge-success' : selectedPatient.overallCondition === 'moderate' ? 'badge-warning' : 'badge-danger'}`}>{selectedPatient.overallCondition}</span></span></p>
+                      </div>
+                    </div>
+
+                    {/* Vital Signs measured by nurse */}
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">🫀 Vital ko&apos;rsatkichlar tarixi</h5>
+                      {selectedPatient.vitalSigns && selectedPatient.vitalSigns.length > 0 ? (
+                        <div className="overflow-x-auto border border-gray-100 dark:border-zinc-800 rounded-xl">
+                          <table className="data-table text-xs">
+                            <thead>
+                              <tr>
+                                <th>Sana / Vaqt</th>
+                                <th>Harorat</th>
+                                <th>Bosim</th>
+                                <th>Puls</th>
+                                <th>SpO2</th>
+                                <th>Qand</th>
+                                <th>Vazn</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedPatient.vitalSigns.map((v, i) => (
+                                <tr key={i}>
+                                  <td>{v.date} · {v.time}</td>
+                                  <td className="font-semibold">{v.temperature ? `${v.temperature}°C` : '—'}</td>
+                                  <td className="font-mono">{v.bloodPressure || '—'}</td>
+                                  <td>{v.pulse ? `${v.pulse} /min` : '—'}</td>
+                                  <td>{v.spo2 ? `${v.spo2}%` : '—'}</td>
+                                  <td>{v.sugar ? `${v.sugar} mmol` : '—'}</td>
+                                  <td>{v.weight ? `${v.weight} kg` : '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50/50 dark:bg-zinc-800/10 rounded-xl border border-dashed border-gray-200">Hayotiy ko&apos;rsatkichlar qayd etilmagan</p>}
+                    </div>
+
+                    {/* Nurse shift notes */}
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">📝 Hamshira izohlari jurnali</h5>
+                      {selectedPatient.nurseNotes && selectedPatient.nurseNotes.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {selectedPatient.nurseNotes.map((n, i) => (
+                            <div key={i} className="p-3 bg-gray-55/40 dark:bg-zinc-800/30 rounded-xl border border-gray-100/50 dark:border-zinc-800/50 text-xs">
+                              <div className="flex justify-between font-semibold text-gray-500 mb-1 text-[10px]">
+                                <span>📅 {n.date} • {n.time} ({n.shift} smena)</span>
+                                <span>ID: {n.nurse}</span>
+                              </div>
+                              <p className="text-gray-800 dark:text-gray-200 italic">&ldquo;{n.note}&rdquo;</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50/50 dark:bg-zinc-800/10 rounded-xl border border-dashed border-gray-200">Hamshira qaydlari mavjud emas</p>}
+                    </div>
+
+                    {/* Previous Visits */}
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">📅 Tashriflar tarixi</h5>
+                      {selectedPatient.visits && selectedPatient.visits.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedPatient.visits.map((vis, i) => (
+                            <div key={i} className="p-3 bg-white dark:bg-zinc-900 border border-gray-150 dark:border-zinc-800 rounded-xl text-xs">
+                              <div className="flex justify-between font-semibold text-gray-400 mb-1">
+                                <span>Tashrif sanasi: {vis.date}</span>
+                                <span className="badge badge-info">{vis.icdCode || 'ICD-10'}</span>
+                              </div>
+                              <p className="font-bold text-gray-900 dark:text-white">Tashxis: {vis.diagnosis}</p>
+                              {vis.notes && <p className="mt-1 text-gray-650 dark:text-gray-400">Izoh: {vis.notes}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50/50 dark:bg-zinc-800/10 rounded-xl border border-dashed border-gray-200">Avvalgi tashriflar tarixi mavjud emas</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. TREATMENTS AND MEDICINES TAB */}
+                {drawerTab === 'treatments' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    {/* Active Treatment Plans */}
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">📋 Muolajalar & Rejalar</h5>
+                      {patTreatments.length > 0 ? (
+                        <div className="space-y-3">
+                          {patTreatments.map(t => (
+                            <div key={t.id} className="p-4 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl text-xs space-y-2 shadow-sm">
+                              <div className="flex justify-between items-center">
+                                <h6 className="font-bold text-sm text-blue-600 dark:text-blue-400">{t.treatmentName}</h6>
+                                <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-danger'}`}>{t.status === 'active' ? 'Faol' : 'Bekor'}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-gray-500">
+                                <p>📅 Boshlanishi: <span className="font-semibold text-gray-700 dark:text-gray-300">{t.startDate}</span></p>
+                                <p>⏱️ Vaqt: <span className="font-semibold text-gray-700 dark:text-gray-300">{t.time}</span></p>
+                                <p>📅 Davomiyligi: <span className="font-semibold text-gray-700 dark:text-gray-300">{t.durationDays} kun ({t.frequency})</span></p>
+                                <p>💵 Summa: <span className="font-semibold text-gray-700 dark:text-gray-300 font-mono">{formatMoney(t.price)} so&apos;m</span></p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-6 bg-gray-50/50 dark:bg-zinc-800/10 rounded-2xl border border-dashed border-gray-200">Muolaja rejalari mavjud emas</p>}
+                    </div>
+
+                    {/* Prescriptions */}
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">💊 Shifokor yozgan retseptlar</h5>
+                      {selectedPatient.prescriptions && selectedPatient.prescriptions.length > 0 ? (
+                        <div className="overflow-x-auto border border-gray-100 dark:border-zinc-800 rounded-xl">
+                          <table className="data-table text-xs">
+                            <thead>
+                              <tr>
+                                <th>Dori</th>
+                                <th>Dozasi</th>
+                                <th>Muddati</th>
+                                <th>Ko&apos;rsatma</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedPatient.prescriptions.map((pr, i) => (
+                                <tr key={i}>
+                                  <td className="font-semibold text-gray-900 dark:text-white">{pr.medicine}</td>
+                                  <td>{pr.dose} · {pr.frequency}</td>
+                                  <td>{pr.duration}</td>
+                                  <td className="text-gray-500">{pr.instructions || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50/50 dark:bg-zinc-800/10 rounded-xl border border-dashed border-gray-200">Hozircha retseptlar yozilmagan</p>}
+                    </div>
+
+                    {/* Medications Distribution */}
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5">💉 Dorilar qabul qilinish tarixi</h5>
+                      {selectedPatient.medications && selectedPatient.medications.length > 0 ? (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {selectedPatient.medications.map((m, i) => (
+                            <div key={i} className="flex justify-between items-center p-2.5 bg-gray-55/35 dark:bg-zinc-850/30 rounded-xl text-xs">
+                              <div>
+                                <span className="font-semibold text-gray-900 dark:text-white">{m.name}</span>
+                                <span className="ml-2 text-gray-400 font-normal">({m.dose})</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400">{m.date} {m.time}</span>
+                                <span className={`badge ${m.status === 'given' ? 'badge-success' : 'badge-warning'}`}>
+                                  {m.status === 'given' ? 'Berildi' : 'Kutilmoqda'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50/50 dark:bg-zinc-800/10 rounded-xl border border-dashed border-gray-200">Dori berish jurnali bo&apos;sh</p>}
+                    </div>
+
+                    {/* Diet details */}
+                    {selectedPatient.diet ? (
+                      <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/10 dark:to-orange-950/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl text-xs">
+                        <h6 className="font-bold text-amber-700 dark:text-amber-400 mb-2">🍽️ Parhez va ovqatlanish rejasi</h6>
+                        <p><span className="text-gray-500">Parhez turi:</span> <span className="font-semibold text-gray-800 dark:text-gray-200">{selectedPatient.diet.type}</span></p>
+                        {selectedPatient.diet.restrictions && <p className="mt-1 text-gray-500">Taqiqlar: <span className="font-medium text-gray-800 dark:text-gray-200">{selectedPatient.diet.restrictions.join(', ') || selectedPatient.diet.restrictions}</span></p>}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-450 italic text-center py-3">Bemor uchun maxsus parhez tayinlanmagan</p>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. FINANCIAL TAB */}
+                {drawerTab === 'financial' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/10 dark:to-orange-950/10 rounded-2xl p-5 border border-yellow-200/50 dark:border-yellow-900/20">
+                      <h4 className="text-sm font-bold text-yellow-800 dark:text-yellow-400 mb-4 flex items-center gap-1.5"><Wallet size={16} /> Balans holati</h4>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="bg-white dark:bg-zinc-900 rounded-xl p-3 border border-yellow-100 dark:border-zinc-800 shadow-sm">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold">Jami hisob</p>
+                          <p className="text-base font-bold text-gray-900 dark:text-white font-mono mt-1">{formatMoney(totalBilled)}</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-900 rounded-xl p-3 border border-yellow-100 dark:border-zinc-800 shadow-sm">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold font-green-600">To&apos;langan</p>
+                          <p className="text-base font-bold text-green-650 font-mono mt-1">{formatMoney(totalPaid)}</p>
+                        </div>
+                        <div className={`rounded-xl p-3 shadow-sm border-2 ${debt > 0 ? 'bg-red-50/50 dark:bg-red-950/10 border-red-200' : 'bg-green-50/50 dark:bg-green-950/10 border-green-200'}`}>
+                          <p className="text-[10px] text-gray-500 uppercase font-bold">{debt > 0 ? 'Qarz' : 'Holat'}</p>
+                          <p className={`text-base font-extrabold font-mono mt-1 ${debt > 0 ? 'text-red-600' : 'text-green-600'}`}>{debt > 0 ? formatMoney(debt) : "Qarz yo'q"}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h5 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1.5"><CreditCard size={14} /> To&apos;lovlar operatsiyalari jurnali</h5>
+                      {patPayments.length > 0 ? (
+                        <div className="overflow-x-auto border border-gray-100 dark:border-zinc-800 rounded-xl">
+                          <table className="data-table text-xs">
+                            <thead>
+                              <tr>
+                                <th>ID / Sana</th>
+                                <th>Xizmatlar</th>
+                                <th>Jami narxi</th>
+                                <th>Chegirma</th>
+                                <th>To&apos;langan</th>
+                                <th>Usul</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {patPayments.map(p => (
+                                <tr key={p.id}>
+                                  <td>
+                                    <div className="font-semibold text-gray-700 dark:text-gray-300">{p.id.split('-').pop()}</div>
+                                    <div className="text-[9px] text-gray-400">{p.date}</div>
+                                  </td>
+                                  <td className="max-w-[150px] truncate text-gray-700 dark:text-gray-300" title={p.services?.join(', ')}>
+                                    {p.services?.join(', ') || '—'}
+                                  </td>
+                                  <td className="font-mono">{formatMoney(p.totalAmount)}</td>
+                                  <td className="font-mono text-gray-400">{p.discount ? `-${formatMoney(p.discount)}` : '0'}</td>
+                                  <td className="font-mono font-bold text-green-650">{formatMoney(p.paid)}</td>
+                                  <td>
+                                    <span className="badge badge-info">{p.method || 'Naqd'}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : <p className="text-xs text-gray-400 italic text-center py-6 bg-gray-50/50 dark:bg-zinc-800/10 rounded-2xl border border-dashed border-gray-200">To&apos;lovlar tarixi mavjud emas</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. DOCUMENTS TAB */}
+                {drawerTab === 'documents' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+                      <h5 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1.5">📁 Analizlar, Rentgen va Tibbiy Hujjatlar</h5>
+                      <label className="btn btn-primary btn-sm cursor-pointer py-1.5 px-4 text-xs">
+                        <Upload size={14} /> Yangi fayl qo&apos;shish
+                        <input type="file" multiple className="hidden" onChange={handleHistoryFileUpload} />
+                      </label>
+                    </div>
+
+                    {selectedPatient.files && selectedPatient.files.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedPatient.files.map(file => (
+                          <div key={file.id} className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 shadow-sm text-xs">
+                            <div className="flex items-center gap-2 truncate max-w-[70%]">
+                              <span className="text-2xl shrink-0">{getFileIcon(file.name)}</span>
+                              <div className="truncate">
+                                <p className="font-semibold text-gray-850 dark:text-gray-200 truncate" title={file.name}>{file.name}</p>
+                                <p className="text-[10px] text-gray-400">{(file.size / 1024).toFixed(1)} KB • {file.date}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <a href={file.content} download={file.name} className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-550/10 text-blue-500 flex items-center justify-center" title="Yuklab olish">
+                                <Download size={14} />
+                              </a>
+                              <button type="button" onClick={() => handleHistoryFileDelete(file.id)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-550/10 text-red-500 flex items-center justify-center border-none bg-transparent" title="O'chirish">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-12 text-center border border-dashed border-gray-200 dark:border-zinc-800 rounded-2xl bg-gray-50/50 dark:bg-zinc-900/10 text-gray-400 text-xs italic">
+                        Ushbu bemor uchun hozircha analiz natijalari va tibbiy hujjatlar yuklanmagan
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          );
+        })()}
+      </Drawer>
     </div>
   );
 }
@@ -3544,7 +4282,7 @@ const STAFF_PAY_TYPES = [
 ];
 
 function ExpenseSection() {
-  const { expenses, addExpense, staff, updateStaff, finances, setFinances: updateFinances, addActivityLogEntry } = useCrm();
+  const { expenses, addExpense, addIncome, staff, updateStaff, finances, setFinances: updateFinances, addActivityLogEntry } = useCrm();
   const toast = useToast();
   const today = new Date().toISOString().split('T')[0];
 
@@ -3553,11 +4291,23 @@ function ExpenseSection() {
     paymentMethod: 'Naqd', date: today, note: '',
     staffId: '', staffPayType: 'advance'
   };
+  const emptyIncomeForm = {
+    description: '', amount: '', date: today
+  };
   const [form, setForm] = useState(emptyForm);
+  const [incomeForm, setIncomeForm] = useState(emptyIncomeForm);
   const [showForm, setShowForm] = useState(false);
+  const [showIncomeForm, setShowIncomeForm] = useState(false);
 
-  const totalToday = (expenses || []).filter(e => e.date === today).reduce((s, e) => s + (e.amount || 0), 0);
-  const totalAll = (expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
+  // Separate income and expense entries
+  const allEntries = expenses || [];
+  const expenseEntries = allEntries.filter(e => e.type !== 'income');
+  const incomeEntries = allEntries.filter(e => e.type === 'income');
+
+  const totalExpenseToday = expenseEntries.filter(e => e.date === today).reduce((s, e) => s + (e.amount || 0), 0);
+  const totalExpenseAll = expenseEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const totalIncomeToday = incomeEntries.filter(e => e.date === today).reduce((s, e) => s + (e.amount || 0), 0);
+  const totalIncomeAll = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
 
   // Compute each staff member's net salary (deducting advances/loans/penalties)
   const staffBalance = useMemo(() => {
@@ -3611,21 +4361,39 @@ function ExpenseSection() {
     setForm(emptyForm); setShowForm(false);
   };
 
-  const sortedExpenses = [...(expenses || [])].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+  const handleIncomeSubmit = (ev) => {
+    ev.preventDefault();
+    if (!incomeForm.description || !incomeForm.amount || Number(incomeForm.amount) <= 0) {
+      toast("Sabab va summani to'ldiring", 'error'); return;
+    }
+    addIncome({ description: incomeForm.description, amount: Number(incomeForm.amount), date: incomeForm.date });
+    toast(`Kirim yozildi: ${formatMoney(Number(incomeForm.amount))} so'm`, 'success');
+    setIncomeForm(emptyIncomeForm); setShowIncomeForm(false);
+  };
+
+  const sortedEntries = [...allEntries].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
 
   return (
     <div>
-      <Header title="Xarajatlar (Rasxod)" subtitle="Kunlik xarajatlarni qayd etish" role="reception" />
+      <Header title="Xarajatlar va Kirimlar" subtitle="Kunlik kirim-chiqimlarni qayd etish" role="reception" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
         <div className="card p-4 border-l-4 border-l-red-500">
-          <p className="text-xs text-gray-500 mb-1">Bugungi xarajat</p>
-          <p className="text-xl font-bold text-red-600">{formatMoney(totalToday)} so&apos;m</p>
+          <p className="text-xs text-gray-500 mb-1">Bugungi chiqim</p>
+          <p className="text-xl font-bold text-red-600">{formatMoney(totalExpenseToday)} so&apos;m</p>
         </div>
         <div className="card p-4 border-l-4 border-l-orange-400">
-          <p className="text-xs text-gray-500 mb-1">Jami xarajat</p>
-          <p className="text-xl font-bold text-orange-600">{formatMoney(totalAll)} so&apos;m</p>
+          <p className="text-xs text-gray-500 mb-1">Jami chiqim</p>
+          <p className="text-xl font-bold text-orange-600">{formatMoney(totalExpenseAll)} so&apos;m</p>
+        </div>
+        <div className="card p-4 border-l-4 border-l-green-500">
+          <p className="text-xs text-gray-500 mb-1">Bugungi kirim</p>
+          <p className="text-xl font-bold text-green-600">{formatMoney(totalIncomeToday)} so&apos;m</p>
+        </div>
+        <div className="card p-4 border-l-4 border-l-emerald-400">
+          <p className="text-xs text-gray-500 mb-1">Jami kirim</p>
+          <p className="text-xl font-bold text-emerald-600">{formatMoney(totalIncomeAll)} so&apos;m</p>
         </div>
       </div>
 
@@ -3671,14 +4439,50 @@ function ExpenseSection() {
         </div>
       )}
 
-      {/* Add button */}
-      <div className="flex justify-end mb-4">
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          <Plus size={16} /> Yangi xarajat yozish
+      {/* Add buttons */}
+      <div className="flex flex-wrap justify-end gap-3 mb-4">
+        <button className="btn btn-success" onClick={() => { setShowIncomeForm(!showIncomeForm); setShowForm(false); }}>
+          <TrendingUp size={16} /> Kirim yozish
+        </button>
+        <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setShowIncomeForm(false); }}>
+          <Plus size={16} /> Xarajat yozish
         </button>
       </div>
 
-      {/* Form */}
+      {/* Income Form */}
+      {showIncomeForm && (
+        <div className="card p-5 mb-5 border-t-4 border-t-green-500 animate-fadeIn">
+          <h4 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <TrendingUp size={18} className="text-green-500" /> Kirim qo&apos;shish
+          </h4>
+          <form onSubmit={handleIncomeSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Sabab / Tavsif *</label>
+              <input className="input" placeholder="Masalan: Homiy pul tashlab ketdi"
+                value={incomeForm.description} onChange={e => setIncomeForm({ ...incomeForm, description: e.target.value })} required />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Summa (so&apos;m) *</label>
+              <input className="input font-mono font-bold" type="number" placeholder="0"
+                value={incomeForm.amount} onChange={e => setIncomeForm({ ...incomeForm, amount: e.target.value })} required />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Sana</label>
+              <input className="input" type="date" value={incomeForm.date}
+                onChange={e => setIncomeForm({ ...incomeForm, date: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-3">
+              <button type="button" className="btn btn-outline"
+                onClick={() => { setShowIncomeForm(false); setIncomeForm(emptyIncomeForm); }}>Bekor</button>
+              <button type="submit" className="btn btn-success">
+                <TrendingUp size={16} /> Kirimni saqlash
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Expense Form */}
       {showForm && (
         <div className="card p-5 mb-5 border-t-4 border-t-red-500 animate-fadeIn">
           <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -3797,28 +4601,41 @@ function ExpenseSection() {
         </div>
       )}
 
-      {/* Expenses List */}
+      {/* All Entries List */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
+                <th>Turi</th>
                 <th>Sana</th><th>Tavsif</th><th>Kategoriya</th>
-                <th>To&apos;lov usuli</th><th>Summa</th><th>Izoh</th>
+                <th>Summa</th><th>Izoh</th>
               </tr>
             </thead>
             <tbody>
-              {sortedExpenses.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-8 text-gray-400 italic">Xarajatlar mavjud emas</td></tr>
+              {sortedEntries.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-8 text-gray-400 italic">Yozuvlar mavjud emas</td></tr>
               ) : (
-                sortedExpenses.map(exp => (
-                  <tr key={exp.id}>
+                sortedEntries.map(exp => (
+                  <tr key={exp.id} className={exp.type === 'income' ? 'bg-green-50/50 dark:bg-green-900/10' : ''}>
+                    <td>
+                      {exp.type === 'income' ? (
+                        <span className="badge badge-success flex items-center gap-1 w-fit">
+                          <TrendingUp size={12} /> Kirim
+                        </span>
+                      ) : (
+                        <span className="badge badge-danger flex items-center gap-1 w-fit">
+                          <TrendingDown size={12} /> Chiqim
+                        </span>
+                      )}
+                    </td>
                     <td className="text-sm font-medium">{exp.date}</td>
-                    <td className="text-sm font-semibold text-gray-900">{exp.description}</td>
-                    <td><span className="badge badge-warning">{exp.category}</span></td>
-                    <td className="text-sm">{exp.paymentMethod}</td>
-                    <td className="text-sm font-bold text-red-600 font-mono">{formatMoney(exp.amount)} so&apos;m</td>
-                    <td className="text-xs text-gray-500">{exp.note}</td>
+                    <td className="text-sm font-semibold text-gray-900 dark:text-white">{exp.description}</td>
+                    <td>{exp.type === 'income' ? <span className="badge badge-success">Kirim</span> : <span className="badge badge-warning">{exp.category}</span>}</td>
+                    <td className={`text-sm font-bold font-mono ${exp.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                      {exp.type === 'income' ? '+' : '-'}{formatMoney(exp.amount)} so&apos;m
+                    </td>
+                    <td className="text-xs text-gray-500">{exp.note || '—'}</td>
                   </tr>
                 ))
               )}
@@ -3829,3 +4646,4 @@ function ExpenseSection() {
     </div>
   );
 }
+

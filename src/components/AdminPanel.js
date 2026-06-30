@@ -14,7 +14,7 @@ import {
   UserPlus, Search, Filter, TrendingUp, TrendingDown, Activity,
   AlertTriangle, Calendar, Clock, CheckCircle, XCircle, RefreshCw,
   Building2, Phone, Mail, MapPin, Shield, ChevronRight, Package,
-  FileText, CreditCard, PieChart, ArrowUpDown, User, Copy, Wallet
+  FileText, CreditCard, PieChart, ArrowUpDown, User, Copy, Wallet, Database, X
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart as RPieChart, Pie, Cell,
@@ -32,6 +32,7 @@ const TABS = [
   { key: 'reports', label: 'Hisobotlar', icon: <BarChart3 size={18} /> },
   { key: 'sms', label: 'SMS Boshqaruvi', icon: <Mail size={18} /> },
   { key: 'settings', label: 'Sozlamalar', icon: <Settings size={18} /> },
+  { key: 'database', label: 'Data Baza', icon: <Database size={18} /> },
 ];
 
 const COLORS = ['#2563EB', '#16A34A', '#F59E0B', '#EF4444', '#9333EA', '#EC4899', '#06B6D4', '#84CC16'];
@@ -77,6 +78,7 @@ export default function AdminPanel() {
         {activeTab === 'reports' && <ReportsSection />}
         {activeTab === 'sms' && <SmsManagement />}
         {activeTab === 'settings' && <SettingsSection />}
+        {activeTab === 'database' && <DatabaseSection />}
       </div>
     </div>
   );
@@ -2470,6 +2472,316 @@ function SmsManagement() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ===== DATABASE SECTION =====
+function DatabaseSection() {
+  const {
+    staff, rooms, patients, medicines, services, finances,
+    payments, prescriptionQueue, notifications, activityLog,
+    clinicSettings, callLog, suppliers, smsQueue, treatments,
+    expenses, staffAdvances
+  } = useCrm();
+
+  const toast = useToast();
+  const [activeTable, setActiveTable] = useState('patients');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  const TABLES = [
+    { key: 'patients', label: 'Bemorlar (patients)' },
+    { key: 'staff', label: 'Xodimlar (staff)' },
+    { key: 'payments', label: 'To\'lovlar (payments)' },
+    { key: 'expenses', label: 'Xarajatlar & Kirimlar (expenses)' },
+    { key: 'finances', label: 'Kunlik Moliya (finances)' },
+    { key: 'rooms', label: 'Xonalar (rooms)' },
+    { key: 'treatments', label: 'Muolaja Rejalari (treatments)' },
+    { key: 'medicines', label: 'Dorilar Ombori (medicines)' },
+    { key: 'services', label: 'Xizmatlar (services)' },
+    { key: 'prescriptionQueue', label: 'Retseptlar (prescriptionQueue)' },
+    { key: 'callLog', label: 'Qo\'ng\'iroqlar (callLog)' },
+    { key: 'activityLog', label: 'Faollik Loglari (activityLog)' },
+    { key: 'smsQueue', label: 'SMS Navbati (smsQueue)' },
+    { key: 'suppliers', label: 'Yetkazib beruvchilar (suppliers)' },
+    { key: 'staffAdvances', label: 'Avans & Qarzlar (staffAdvances)' },
+    { key: 'notifications', label: 'Bildirishnomalar (notifications)' },
+    { key: 'clinicSettings', label: 'Klinika Sozlamalari (clinicSettings)' }
+  ];
+
+  // Resolve current database table data
+  const tableData = useMemo(() => {
+    switch (activeTable) {
+      case 'staff': return staff || [];
+      case 'rooms': return rooms || [];
+      case 'patients': return patients || [];
+      case 'medicines': return medicines || [];
+      case 'services': return services || [];
+      case 'finances': return finances || [];
+      case 'payments': return payments || [];
+      case 'prescriptionQueue': return prescriptionQueue || [];
+      case 'notifications': return notifications || [];
+      case 'activityLog': return activityLog || [];
+      case 'callLog': return callLog || [];
+      case 'suppliers': return suppliers || [];
+      case 'smsQueue': return smsQueue || [];
+      case 'treatments': return treatments || [];
+      case 'expenses': return expenses || [];
+      case 'staffAdvances': return staffAdvances || [];
+      case 'clinicSettings': 
+        // convert key-value object to array of key-value pairs
+        return Object.entries(clinicSettings || {}).map(([key, value]) => ({ key, value }));
+      default: return [];
+    }
+  }, [
+    activeTable, staff, rooms, patients, medicines, services, finances,
+    payments, prescriptionQueue, notifications, activityLog,
+    clinicSettings, callLog, suppliers, smsQueue, treatments,
+    expenses, staffAdvances
+  ]);
+
+  // Search/Filter table rows
+  const filteredData = useMemo(() => {
+    if (!searchQuery) return tableData;
+    const q = searchQuery.toLowerCase();
+    return tableData.filter(row => {
+      return Object.values(row).some(val => {
+        if (val === null || val === undefined) return false;
+        if (typeof val === 'object') {
+          return JSON.stringify(val).toLowerCase().includes(q);
+        }
+        return String(val).toLowerCase().includes(q);
+      });
+    });
+  }, [tableData, searchQuery]);
+
+  // Extract all unique columns (keys) from table rows (excl password)
+  const columns = useMemo(() => {
+    if (filteredData.length === 0) return [];
+    const allKeys = new Set();
+    filteredData.slice(0, 20).forEach(row => {
+      Object.keys(row).forEach(k => {
+        if (k !== 'password') allKeys.add(k);
+      });
+    });
+    return Array.from(allKeys);
+  }, [filteredData]);
+
+  // Format cell values beautifully
+  const renderCell = (val) => {
+    if (val === null || val === undefined) return <span className="text-gray-400 italic">null</span>;
+    if (typeof val === 'boolean') return val ? <span className="text-green-600 font-bold">Ha</span> : <span className="text-red-500">Yo&apos;q</span>;
+    if (Array.isArray(val)) return <span className="text-blue-500 font-medium">[{val.length} ta element]</span>;
+    if (typeof val === 'object') return <span className="text-purple-500 font-mono text-xs">{JSON.stringify(val).slice(0, 30)}...</span>;
+    return String(val);
+  };
+
+  // Exporters
+  const exportJSON = () => {
+    if (tableData.length === 0) return;
+    const blob = new Blob([JSON.stringify(tableData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${activeTable}_export_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    if (tableData.length === 0) return;
+    const allKeys = new Set();
+    tableData.forEach(row => {
+      Object.keys(row).forEach(k => { if (k !== 'password') allKeys.add(k); });
+    });
+    const headers = Array.from(allKeys);
+
+    const csvRows = [
+      headers.join(','),
+      ...tableData.map(row => {
+        return headers.map(k => {
+          let val = row[k];
+          if (val === null || val === undefined) return '""';
+          if (typeof val === 'object') val = JSON.stringify(val);
+          // Escape quotes
+          const escaped = String(val).replace(/"/g, '""');
+          return `"${escaped}"`;
+        }).join(',');
+      })
+    ];
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${activeTable}_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportFullJSON = () => {
+    const fullDb = {
+      staff, rooms, patients, medicines, services, finances,
+      payments, prescriptionQueue, notifications, activityLog,
+      clinicSettings, callLog, suppliers, smsQueue, treatments,
+      expenses, staffAdvances
+    };
+    const blob = new Blob([JSON.stringify(fullDb, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `full_database_training_export_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Header title="Ma'lumotlar Bazasi" subtitle="SQL/SQLite jadvallari ko'rinishi, AI va analitika uchun data eksporti" role="admin" />
+
+      {/* Main Controls Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        {/* Left Side: Tables Selection list */}
+        <div className="card p-4 flex flex-col gap-2 bg-white dark:bg-zinc-900 border border-gray-150 dark:border-zinc-800">
+          <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider mb-2 text-gray-400">Jadvallar ro&apos;yxati</h3>
+          <div className="space-y-1 overflow-y-auto max-h-[60vh] pr-1">
+            {TABLES.map(t => {
+              const isActive = activeTable === t.key;
+              const count = activeTable === t.key ? filteredData.length : (
+                t.key === 'clinicSettings' ? Object.keys(clinicSettings || {}).length :
+                t.key === 'staff' ? (staff || []).length :
+                t.key === 'rooms' ? (rooms || []).length :
+                t.key === 'patients' ? (patients || []).length :
+                t.key === 'medicines' ? (medicines || []).length :
+                t.key === 'services' ? (services || []).length :
+                t.key === 'finances' ? (finances || []).length :
+                t.key === 'payments' ? (payments || []).length :
+                t.key === 'prescriptionQueue' ? (prescriptionQueue || []).length :
+                t.key === 'notifications' ? (notifications || []).length :
+                t.key === 'activityLog' ? (activityLog || []).length :
+                t.key === 'callLog' ? (callLog || []).length :
+                t.key === 'suppliers' ? (suppliers || []).length :
+                t.key === 'smsQueue' ? (smsQueue || []).length :
+                t.key === 'treatments' ? (treatments || []).length :
+                t.key === 'expenses' ? (expenses || []).length :
+                t.key === 'staffAdvances' ? (staffAdvances || []).length : 0
+              );
+
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => { setActiveTable(t.key); setSearchQuery(''); setSelectedRow(null); }}
+                  className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all border-none ${
+                    isActive 
+                      ? 'bg-blue-500 text-white shadow-sm' 
+                      : 'bg-transparent hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-750 dark:text-gray-300'
+                  }`}
+                >
+                  <span>{t.label}</span>
+                  <span className={`badge py-0.5 px-1.5 text-[10px] ${isActive ? 'bg-white/20 text-white border-none' : 'bg-gray-150 dark:bg-zinc-800 text-gray-500'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Side: Data view & Export Actions */}
+        <div className="lg:col-span-3 card p-5 bg-white dark:bg-zinc-900 border border-gray-150 dark:border-zinc-800 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-zinc-800 pb-4">
+            <div>
+              <h3 className="font-bold text-gray-950 dark:text-white text-base capitalize">{activeTable} jadvali ma&apos;lumotlari</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Jami {filteredData.length} ta yozuv topildi</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={exportJSON} className="btn btn-outline py-1.5 px-3 text-xs font-bold flex items-center gap-1.5">
+                <Download size={14} /> JSON Eksport
+              </button>
+              <button onClick={exportCSV} className="btn btn-outline py-1.5 px-3 text-xs font-bold flex items-center gap-1.5">
+                <Download size={14} /> CSV Eksport
+              </button>
+              <button onClick={exportFullJSON} className="btn btn-primary py-1.5 px-3.5 text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-indigo-600 border-none shadow-sm text-white">
+                <Database size={14} /> Butun Baza (AI Fine-tune)
+              </button>
+            </div>
+          </div>
+
+          {/* Search bar inside Table */}
+          <div className="relative w-full">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              className="input pl-9 pr-3 py-2 text-xs"
+              placeholder={`Qidirish (${activeTable} jadvalidan)...`}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-650 border-none bg-transparent" onClick={() => setSearchQuery('')}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Data table container */}
+          <div className="overflow-x-auto border border-gray-100 dark:border-zinc-800 rounded-xl max-h-[55vh] flex-1">
+            <table className="data-table text-xs">
+              <thead>
+                <tr className="sticky top-0 bg-gray-50 dark:bg-zinc-850 z-10 font-bold">
+                  <th className="w-10">#</th>
+                  {columns.map(col => <th key={col}>{col}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length + 1} className="text-center py-12 text-gray-400 italic">
+                      Hozircha ma&apos;lumotlar bazasida yozuvlar mavjud emas
+                    </td>
+                  </tr>
+                ) : (
+                  filteredData.map((row, index) => (
+                    <tr 
+                      key={row.id || row.key || index} 
+                      className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors"
+                      onClick={() => setSelectedRow(row)}
+                    >
+                      <td className="text-gray-400 font-mono text-[10px]">{index + 1}</td>
+                      {columns.map(col => <td key={col} className="truncate max-w-[200px]">{renderCell(row[col])}</td>)}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Row JSON Detailed Modal */}
+      <Modal isOpen={!!selectedRow} onClose={() => setSelectedRow(null)} title="Raw JSON Ma'lumotlari (AI & Analitika uchun)" size="lg">
+        {selectedRow && (
+          <div className="space-y-4 animate-fadeIn">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gray-400">Yozuvning to&apos;liq relatsion sxemasi (JSON ko&apos;rinishi):</span>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(selectedRow, null, 2));
+                  toast("JSON nusxalandi!", "success");
+                }}
+                className="btn btn-outline py-1 px-2.5 text-[11px] font-semibold flex items-center gap-1"
+              >
+                <Copy size={12} /> Nusxalash
+              </button>
+            </div>
+            <pre className="bg-gray-950 text-green-400 p-5 rounded-2xl overflow-x-auto text-[11px] font-mono leading-relaxed max-h-[60vh] border border-zinc-800 shadow-inner">
+              {JSON.stringify(selectedRow, null, 2)}
+            </pre>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
